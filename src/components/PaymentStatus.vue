@@ -1,0 +1,46 @@
+<script setup lang="ts">
+import type { ReciboStatus } from '@/stores/recibos'
+
+interface Props {
+  status: ReciboStatus
+  size?: 'sm' | 'md'
+}
+
+const props = withDefaults(defineProps<Props>(), { size: 'md' })
+
+const config: Record<ReciboStatus, { label: string; classes: string; dot: string }> = {
+  pending: {
+    label: 'Pendiente',
+    classes: 'bg-slate-100 text-slate-600',
+    dot: 'bg-slate-400',
+  },
+  soon: {
+    label: 'Próximo',
+    classes: 'bg-warning-100 text-warning-600',
+    dot: 'bg-warning',
+  },
+  overdue: {
+    label: 'Vencido',
+    classes: 'bg-danger-100 text-danger-600',
+    dot: 'bg-danger',
+  },
+  paid: {
+    label: 'Pagado',
+    classes: 'bg-success-100 text-success-600',
+    dot: 'bg-success',
+  },
+}
+</script>
+
+<template>
+  <span
+    :class="[
+      'inline-flex items-center gap-1.5 font-medium rounded-full',
+      config[props.status].classes,
+      props.size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm',
+    ]"
+  >
+    <span :class="['w-1.5 h-1.5 rounded-full', config[props.status].dot]" />
+    {{ config[props.status].label }}
+  </span>
+</template>
