@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, MapPin, Phone, Bell, Shield, LogOut, ChevronRight, LayoutDashboard } from 'lucide-vue-next'
+import { User, MapPin, Phone, Shield, LogOut, ChevronRight, LayoutDashboard } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
@@ -12,12 +12,6 @@ const auth = useAuthStore()
 
 const showLogoutModal = ref(false)
 
-const notifications = ref({
-  sms: true,
-  calls: true,
-  whatsapp: false,
-  email: false,
-})
 
 function handleLogout() {
   auth.logout()
@@ -97,41 +91,6 @@ function getInitials(name?: string) {
             </div>
             <p class="text-sm text-slate-400">Agregar teléfono secundario</p>
           </button>
-        </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-bold text-slate-800">Notificaciones</h3>
-          <Bell class="w-4 h-4 text-slate-400" />
-        </div>
-        <div class="space-y-3">
-          <div v-for="(enabled, key) in notifications" :key="key" class="flex items-center justify-between">
-            <div>
-              <p class="text-sm font-medium text-slate-700 capitalize">
-                {{ key === 'sms' ? 'SMS' : key === 'calls' ? 'Llamadas' : key === 'whatsapp' ? 'WhatsApp' : 'Email' }}
-              </p>
-              <p class="text-xs text-slate-400">
-                {{ key === 'sms' ? 'Recordatorios por mensaje' :
-                   key === 'calls' ? 'Llamadas preventivas' :
-                   key === 'whatsapp' ? 'Mensajes de WhatsApp' : 'Notificaciones por correo' }}
-              </p>
-            </div>
-            <button
-              @click="notifications[key] = !notifications[key]"
-              :class="[
-                'w-12 h-6 rounded-full transition-colors duration-200 relative',
-                notifications[key] ? 'bg-primary-600' : 'bg-slate-200',
-              ]"
-            >
-              <span
-                :class="[
-                  'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200',
-                  notifications[key] ? 'translate-x-6' : 'translate-x-0.5',
-                ]"
-              />
-            </button>
-          </div>
         </div>
       </div>
 

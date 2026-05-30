@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, CreditCard, Bell, TrendingDown } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -10,6 +10,8 @@ import BottomTabBar from '@/components/BottomTabBar.vue'
 const router = useRouter()
 const auth = useAuthStore()
 const store = useRecibosStore()
+
+onMounted(() => store.fetchRecibos())
 
 const total = computed(() => store.recibos.length)
 const overdue = computed(() => store.recibos.filter(r => r.status === 'overdue').length)

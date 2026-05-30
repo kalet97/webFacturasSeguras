@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { api } from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 
 export type ReciboStatus = 'pending' | 'soon' | 'overdue' | 'paid'
 export type ServiceType = 'energia' | 'agua' | 'gas' | 'internet' | 'telefono' | 'tv'
@@ -34,80 +36,107 @@ export interface HistoryItem {
   amount?: number
 }
 
-const mockRecibos: Recibo[] = [
-  {
-    id: '1',
-    serviceType: 'energia',
-    company: 'EPM',
-    clientNumber: '1234567890',
-    dueDate: '2026-06-04',
-    address: 'Carrera 7 #45-12, Bogotá',
-    amount: 185000,
-    status: 'soon',
-    daysLeft: 5,
-    notifications: [
-      { id: 'n1', date: '2026-05-28', type: 'sms', description: 'Recordatorio enviado por SMS' },
-      { id: 'n2', date: '2026-05-25', type: 'call', description: 'Llamada preventiva realizada' },
-    ],
-  },
-  {
-    id: '2',
-    serviceType: 'agua',
-    company: 'Acueducto Bogotá',
-    clientNumber: '0987654321',
-    dueDate: '2026-06-15',
-    address: 'Carrera 7 #45-12, Bogotá',
-    amount: 65000,
-    status: 'pending',
-    daysLeft: 16,
-    notifications: [
-      { id: 'n3', date: '2026-05-20', type: 'sms', description: 'Primer recordatorio enviado' },
-    ],
-  },
-  {
-    id: '3',
-    serviceType: 'gas',
-    company: 'Gas Natural',
-    clientNumber: '1122334455',
-    dueDate: '2026-05-28',
-    address: 'Carrera 7 #45-12, Bogotá',
-    amount: 42000,
-    status: 'overdue',
-    daysLeft: -2,
-    notifications: [
-      { id: 'n4', date: '2026-05-27', type: 'call', description: 'Llamada urgente realizada' },
-      { id: 'n5', date: '2026-05-26', type: 'sms', description: 'Alerta de vencimiento enviada' },
-      { id: 'n6', date: '2026-05-20', type: 'sms', description: 'Recordatorio enviado' },
-    ],
-  },
-  {
-    id: '4',
-    serviceType: 'internet',
-    company: 'Claro',
-    clientNumber: '5544332211',
-    dueDate: '2026-06-20',
-    address: 'Carrera 7 #45-12, Bogotá',
-    amount: 89000,
-    status: 'paid',
-    daysLeft: 21,
-    notifications: [
-      { id: 'n7', date: '2026-05-15', type: 'payment', description: 'Pago realizado exitosamente' },
-    ],
-  },
-]
+// --- Mapeo desde la API ---
 
-const mockHistory: HistoryItem[] = [
-  { id: 'h1', type: 'call', date: '2026-05-29', description: 'Llamada preventiva a cliente', reciboId: '1', reciboName: 'EPM - Energía' },
-  { id: 'h2', type: 'payment', date: '2026-05-28', description: 'Pago realizado por encargo', reciboId: '4', reciboName: 'Claro - Internet', amount: 89000 },
-  { id: 'h3', type: 'reminder', date: '2026-05-27', description: 'SMS recordatorio enviado', reciboId: '3', reciboName: 'Gas Natural' },
-  { id: 'h4', type: 'visit', date: '2026-05-26', description: 'Visita domiciliaria realizada', reciboId: '3', reciboName: 'Gas Natural' },
-  { id: 'h5', type: 'reminder', date: '2026-05-25', description: 'SMS recordatorio enviado', reciboId: '2', reciboName: 'Acueducto Bogotá' },
-  { id: 'h6', type: 'call', date: '2026-05-24', description: 'Llamada preventiva a cliente', reciboId: '2', reciboName: 'Acueducto Bogotá' },
-]
+interface ApiEmpresa  { idEmpresaServicio: number; nombre: string; color: string | null }
+interface ApiTipo     { idTipoFactura: number; nombre: string }
+interface ApiEstado   { idEstadoRecibo: number; nombre: string }
+
+interface ApiRecibo {
+  idRecibo: number
+  idCliente: number
+  codigoRecibo: string | null
+  nombre: string
+  precio: number | null
+  fechaOportuna: string | null
+  fechaMaxima: string | null
+  fechaSistem: string | null
+  observacion: string | null
+  empresa_servicio: ApiEmpresa | null
+  tipo_factura: ApiTipo | null
+  estado_recibo: ApiEstado | null
+}
+
+const SERVICE_TYPE_MAP: Record<string, ServiceType> = {
+  energia: 'energia', eléctrica: 'energia', electrica: 'energia',
+  agua: 'agua', acueducto: 'agua',
+  gas: 'gas',
+  internet: 'internet', fibra: 'internet',
+  telefono: 'telefono', teléfono: 'telefono', celular: 'telefono', movil: 'telefono',
+  tv: 'tv', television: 'tv', televisión: 'tv', cable: 'tv',
+}
+
+const PAID_NAMES = ['pagado', 'pago', 'paid', 'cancelado']
+
+function inferServiceType(empresa: ApiEmpresa | null, tipo: ApiTipo | null): ServiceType {
+  const tokens = [empresa?.nombre ?? '', tipo?.nombre ?? '']
+    .join(' ')
+    .toLowerCase()
+    .split(/\s+/)
+
+  for (const token of tokens) {
+    if (SERVICE_TYPE_MAP[token]) return SERVICE_TYPE_MAP[token]
+  }
+  return 'internet'
+}
+
+function calcStatus(api: ApiRecibo): ReciboStatus {
+  const estadoNombre = (api.estado_recibo?.nombre ?? '').toLowerCase()
+  if (PAID_NAMES.some(p => estadoNombre.includes(p))) return 'paid'
+
+  if (!api.fechaMaxima) return 'pending'
+  const days = Math.ceil(
+    (new Date(api.fechaMaxima).getTime() - Date.now()) / 86_400_000,
+  )
+  if (days < 0) return 'overdue'
+  if (days <= 5) return 'soon'
+  return 'pending'
+}
+
+function calcDaysLeft(fechaMaxima: string | null): number {
+  if (!fechaMaxima) return 0
+  return Math.ceil((new Date(fechaMaxima).getTime() - Date.now()) / 86_400_000)
+}
+
+function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
+  const status = calcStatus(r)
+  return {
+    id: String(r.idRecibo),
+    serviceType: inferServiceType(r.empresa_servicio, r.tipo_factura),
+    company: r.empresa_servicio?.nombre ?? r.nombre,
+    clientNumber: r.codigoRecibo ?? String(r.idRecibo),
+    dueDate: r.fechaMaxima ?? r.fechaOportuna ?? '',
+    address: clienteAddress,
+    amount: r.precio ?? undefined,
+    status,
+    daysLeft: status === 'paid' ? 0 : calcDaysLeft(r.fechaMaxima),
+    notifications: [],
+  }
+}
+
+// --- Store ---
 
 export const useRecibosStore = defineStore('recibos', () => {
-  const recibos = ref<Recibo[]>(mockRecibos)
-  const history = ref<HistoryItem[]>(mockHistory)
+  const recibos = ref<Recibo[]>([])
+  const history = ref<HistoryItem[]>([])
+  const loading = ref(false)
+
+  async function fetchRecibos() {
+    const auth = useAuthStore()
+    if (!auth.user) return
+
+    loading.value = true
+    try {
+      const data = await api.get<ApiRecibo[]>(
+        `/clientes/${auth.user.idCliente}/recibos`,
+        auth.token,
+      )
+      const address = auth.user.address ?? ''
+      recibos.value = data.map(r => mapRecibo(r, address))
+    } finally {
+      loading.value = false
+    }
+  }
 
   function getReciboById(id: string) {
     return recibos.value.find(r => r.id === id)
@@ -115,50 +144,29 @@ export const useRecibosStore = defineStore('recibos', () => {
 
   function addRecibo(data: Omit<Recibo, 'id' | 'status' | 'daysLeft' | 'notifications'>) {
     const dueDate = new Date(data.dueDate)
-    const today = new Date()
-    const daysLeft = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-
+    const daysLeft = Math.ceil((dueDate.getTime() - Date.now()) / 86_400_000)
     let status: ReciboStatus = 'pending'
     if (daysLeft < 0) status = 'overdue'
     else if (daysLeft <= 5) status = 'soon'
-    else status = 'pending'
 
-    const newRecibo: Recibo = {
-      ...data,
-      id: Date.now().toString(),
-      status,
-      daysLeft,
-      notifications: [],
-    }
+    const newRecibo: Recibo = { ...data, id: Date.now().toString(), status, daysLeft, notifications: [] }
     recibos.value.unshift(newRecibo)
     return newRecibo
   }
 
   function updateRecibo(id: string, updates: Partial<Recibo>) {
     const index = recibos.value.findIndex(r => r.id === id)
-    if (index !== -1) {
-      recibos.value[index] = { ...recibos.value[index], ...updates }
-    }
+    if (index !== -1) recibos.value[index] = { ...recibos.value[index], ...updates }
   }
 
   const serviceLabels: Record<ServiceType, string> = {
-    energia: 'Energía Eléctrica',
-    agua: 'Agua',
-    gas: 'Gas Natural',
-    internet: 'Internet',
-    telefono: 'Teléfono',
-    tv: 'TV por Cable',
+    energia: 'Energía Eléctrica', agua: 'Agua', gas: 'Gas Natural',
+    internet: 'Internet', telefono: 'Teléfono', tv: 'TV por Cable',
   }
-
   const serviceIcons: Record<ServiceType, string> = {
-    energia: '⚡',
-    agua: '💧',
-    gas: '🔥',
-    internet: '📶',
-    telefono: '📞',
-    tv: '📺',
+    energia: '⚡', agua: '💧', gas: '🔥',
+    internet: '📶', telefono: '📞', tv: '📺',
   }
-
   const serviceColors: Record<ServiceType, string> = {
     energia: 'bg-warning-50 text-warning-600',
     agua: 'bg-primary-50 text-primary-600',
@@ -169,13 +177,8 @@ export const useRecibosStore = defineStore('recibos', () => {
   }
 
   return {
-    recibos,
-    history,
-    getReciboById,
-    addRecibo,
-    updateRecibo,
-    serviceLabels,
-    serviceIcons,
-    serviceColors,
+    recibos, history, loading,
+    fetchRecibos, getReciboById, addRecibo, updateRecibo,
+    serviceLabels, serviceIcons, serviceColors,
   }
 })

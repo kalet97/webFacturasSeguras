@@ -1,31 +1,31 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Phone, Lock, Eye, EyeOff } from 'lucide-vue-next'
+import { CreditCard, Lock, Eye, EyeOff } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import AppButton from '@/components/AppButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 
-const phone = ref('')
+const cedula = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 
 async function handleLogin() {
-  if (!phone.value || !password.value) {
+  if (!cedula.value || !password.value) {
     error.value = 'Completa todos los campos'
     return
   }
   error.value = ''
   loading.value = true
   try {
-    await auth.login(phone.value, password.value)
+    await auth.login(cedula.value, password.value)
     router.push('/dashboard')
   } catch {
-    error.value = 'Teléfono o contraseña incorrectos'
+    error.value = 'Cédula o contraseña incorrectas'
   } finally {
     loading.value = false
   }
@@ -45,16 +45,15 @@ async function handleLogin() {
 
       <form @submit.prevent="handleLogin" class="flex flex-col gap-4">
         <div>
-          <label class="label">Teléfono</label>
+          <label class="label">Cédula</label>
           <div class="relative">
-            <Phone class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 w-5 h-5" />
+            <CreditCard class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
-              v-model="phone"
-              type="tel"
-              placeholder="3001234567"
+              v-model="cedula"
+              type="text"
+              placeholder="1234567890"
               class="input-field pl-11"
               inputmode="numeric"
-              maxlength="10"
             />
           </div>
         </div>
@@ -103,7 +102,7 @@ async function handleLogin() {
       </div>
 
       <p class="text-center text-xs text-slate-400 mt-4">
-        Admin demo: 3001234567 / cualquier contraseña
+        Demo: cédula 1234567890 / contraseña 123456
       </p>
     </div>
   </div>
