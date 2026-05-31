@@ -17,6 +17,7 @@ const id = route.params.id as string
 const recibo = computed(() => store.getReciboById(id))
 
 const showPayModal  = ref(false)
+const markingPaid   = ref(false)
 const editingName   = ref(false)
 const nameInput     = ref('')
 const savingName    = ref(false)
@@ -49,13 +50,18 @@ function formatCurrency(v?: number) {
 }
 
 function formatDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(d.replace(' ', 'T')).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-function handleMarkPaid() {
-  store.updateRecibo(id, { status: 'paid' })
-  showPayModal.value = false
-  router.back()
+async function handleMarkPaid() {
+  markingPaid.value = true
+  try {
+    await store.markAsPaid(id)
+    showPayModal.value = false
+    router.back()
+  } finally {
+    markingPaid.value = false
+  }
 }
 </script>
 
@@ -185,6 +191,7 @@ function handleMarkPaid() {
       title="¿Marcar como pagado?"
       message="Esta acción indica que el pago ya fue realizado directamente por ti."
       confirm-label="Sí, está pagado"
+      :loading="markingPaid"
       @confirm="handleMarkPaid"
       @cancel="showPayModal = false"
     />

@@ -26,7 +26,7 @@ function isActive(tabName: string) {
 </script>
 
 <template>
-  <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] bg-white border-t border-slate-100 shadow-bottom-bar z-50 safe-bottom">
+  <nav class="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 shadow-bottom-bar z-50 safe-bottom">
     <div class="flex items-stretch">
       <RouterLink
         v-for="tab in tabs"

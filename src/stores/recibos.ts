@@ -80,13 +80,17 @@ function inferServiceType(empresa: ApiEmpresa | null, tipo: ApiTipo | null): Ser
   return 'internet'
 }
 
+function parseDate(s: string) {
+  return new Date(s.replace(' ', 'T'))
+}
+
 function calcStatus(api: ApiRecibo): ReciboStatus {
   const estadoNombre = (api.estado_recibo?.nombre ?? '').toLowerCase()
   if (PAID_NAMES.some(p => estadoNombre.includes(p))) return 'paid'
 
   if (!api.fechaMaxima) return 'pending'
   const days = Math.ceil(
-    (new Date(api.fechaMaxima).getTime() - Date.now()) / 86_400_000,
+    (parseDate(api.fechaMaxima).getTime() - Date.now()) / 86_400_000,
   )
   if (days < 0) return 'overdue'
   if (days <= 5) return 'soon'
@@ -95,7 +99,7 @@ function calcStatus(api: ApiRecibo): ReciboStatus {
 
 function calcDaysLeft(fechaMaxima: string | null): number {
   if (!fechaMaxima) return 0
-  return Math.ceil((new Date(fechaMaxima).getTime() - Date.now()) / 86_400_000)
+  return Math.ceil((parseDate(fechaMaxima).getTime() - Date.now()) / 86_400_000)
 }
 
 function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
@@ -177,6 +181,12 @@ export const useRecibosStore = defineStore('recibos', () => {
     updateRecibo(id, { company: nombre })
   }
 
+  async function markAsPaid(id: string): Promise<void> {
+    const auth = useAuthStore()
+    await api.put(`/recibos/${id}`, { idEstadoRecibo: 2 }, auth.token)
+    updateRecibo(id, { status: 'paid', daysLeft: 0 })
+  }
+
   function updateRecibo(id: string, updates: Partial<Recibo>) {
     const index = recibos.value.findIndex(r => r.id === id)
     if (index !== -1) recibos.value[index] = { ...recibos.value[index], ...updates }
@@ -201,7 +211,7 @@ export const useRecibosStore = defineStore('recibos', () => {
 
   return {
     recibos, history, loading,
-    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo,
+    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo, markAsPaid,
     serviceLabels, serviceIcons, serviceColors,
   }
 })

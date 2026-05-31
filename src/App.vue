@@ -9,7 +9,7 @@ function transitionName() {
 </script>
 
 <template>
-  <div :class="route.meta.fullscreen ? 'w-full min-h-screen' : 'phone-container bg-white shadow-2xl'">
+  <div :class="route.meta.fullscreen ? 'w-full min-h-screen' : 'phone-container bg-white'">
     <RouterView v-slot="{ Component }">
       <Transition :name="transitionName()" mode="out-in">
         <component :is="Component" :key="route.path" />
