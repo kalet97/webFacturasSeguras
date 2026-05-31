@@ -1,41 +1,40 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, CreditCard, Mail, MapPin, Phone, Lock, Eye, EyeOff, ChevronLeft } from 'lucide-vue-next'
+import { User, Phone, MapPin, Lock, Eye, EyeOff } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 
 const router = useRouter()
-const auth = useAuthStore()
+const auth   = useAuthStore()
 
 const form = ref({
-  nombre:             '',
-  apellido:           '',
-  cedula:             '',
-  correo:             '',
-  telefonoPrincipal:  '',
-  telefonoSecundario: '',
-  whatsapp:           '',
-  direccion:          '',
+  nombre:             auth.user?.nombre             ?? '',
+  apellido:           auth.user?.apellido           ?? '',
+  telefonoPrincipal:  auth.user?.phone              ?? '',
+  telefonoSecundario: auth.user?.telefonoSecundario ?? '',
+  direccion:          auth.user?.address            ?? '',
   clave:              '',
   confirmarClave:     '',
 })
-const showPassword   = ref(false)
-const showConfirm    = ref(false)
-const loading        = ref(false)
-const error          = ref('')
 
-async function handleRegister() {
-  if (!form.value.nombre || !form.value.apellido || !form.value.cedula ||
-      !form.value.correo  || !form.value.telefonoPrincipal || !form.value.clave) {
-    error.value = 'Completa todos los campos obligatorios'
+const showPassword  = ref(false)
+const showConfirm   = ref(false)
+const loading       = ref(false)
+const error         = ref('')
+const success       = ref(false)
+
+async function handleSave() {
+  if (!form.value.nombre || !form.value.apellido || !form.value.telefonoPrincipal) {
+    error.value = 'Nombre, apellido y teléfono principal son obligatorios'
     return
   }
-  if (form.value.clave !== form.value.confirmarClave) {
+  if (form.value.clave && form.value.clave !== form.value.confirmarClave) {
     error.value = 'Las contraseñas no coinciden'
     return
   }
-  if (form.value.clave.length < 6) {
+  if (form.value.clave && form.value.clave.length < 6) {
     error.value = 'La contraseña debe tener mínimo 6 caracteres'
     return
   }
@@ -43,20 +42,20 @@ async function handleRegister() {
   error.value = ''
   loading.value = true
   try {
-    await auth.register({
+    const payload: Parameters<typeof auth.updateProfile>[0] = {
       nombre:             form.value.nombre,
       apellido:           form.value.apellido,
-      cedula:             Number(form.value.cedula),
-      correo:             form.value.correo,
-      clave:              form.value.clave,
       telefonoPrincipal:  Number(form.value.telefonoPrincipal),
       telefonoSecundario: form.value.telefonoSecundario ? Number(form.value.telefonoSecundario) : null,
-      whatsapp:           form.value.whatsapp           ? Number(form.value.whatsapp)           : null,
       direccion:          form.value.direccion || undefined,
-    })
-    router.replace('/dashboard')
+    }
+    if (form.value.clave) payload.clave = form.value.clave
+
+    await auth.updateProfile(payload)
+    success.value = true
+    setTimeout(() => router.back(), 1000)
   } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Error al crear la cuenta'
+    error.value = e instanceof Error ? e.message : 'Error al guardar los cambios'
   } finally {
     loading.value = false
   }
@@ -65,19 +64,12 @@ async function handleRegister() {
 
 <template>
   <div class="screen">
-    <div class="flex items-center gap-2 px-4 pt-4 pb-2">
-      <button @click="router.back()" class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100">
-        <ChevronLeft class="w-5 h-5 text-slate-700" />
-      </button>
-      <h1 class="text-lg font-bold text-slate-800">Crear cuenta</h1>
-    </div>
+    <AppHeader title="Editar perfil" />
 
-    <div class="flex-1 overflow-y-auto px-6 pb-10">
-      <p class="text-slate-500 text-sm mb-5">Los campos con <span class="text-danger">*</span> son obligatorios</p>
+    <div class="flex-1 overflow-y-auto px-4 pb-10">
+      <form @submit.prevent="handleSave" class="flex flex-col gap-4 pt-2">
 
-      <form @submit.prevent="handleRegister" class="flex flex-col gap-4">
-
-        <!-- Nombre y apellido en fila -->
+        <!-- Nombre y apellido -->
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label">Nombre <span class="text-danger">*</span></label>
@@ -89,35 +81,6 @@ async function handleRegister() {
           <div>
             <label class="label">Apellido <span class="text-danger">*</span></label>
             <input v-model="form.apellido" type="text" placeholder="García" class="input-field text-sm" />
-          </div>
-        </div>
-
-        <!-- Cédula -->
-        <div>
-          <label class="label">Cédula <span class="text-danger">*</span></label>
-          <div class="relative">
-            <CreditCard class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              v-model="form.cedula"
-              type="text"
-              inputmode="numeric"
-              placeholder="1234567890"
-              class="input-field pl-11"
-            />
-          </div>
-        </div>
-
-        <!-- Correo -->
-        <div>
-          <label class="label">Correo electrónico <span class="text-danger">*</span></label>
-          <div class="relative">
-            <Mail class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              v-model="form.correo"
-              type="email"
-              placeholder="correo@ejemplo.com"
-              class="input-field pl-11"
-            />
           </div>
         </div>
 
@@ -137,30 +100,17 @@ async function handleRegister() {
           </div>
         </div>
 
-        <!-- Teléfono secundario y WhatsApp en fila -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="label">Tel. secundario <span class="text-slate-400 text-xs">(opc.)</span></label>
-            <div class="relative">
-              <Phone class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                v-model="form.telefonoSecundario"
-                type="tel"
-                inputmode="numeric"
-                placeholder="6011234567"
-                class="input-field pl-9 text-sm"
-                maxlength="10"
-              />
-            </div>
-          </div>
-          <div>
-            <label class="label">WhatsApp <span class="text-slate-400 text-xs">(opc.)</span></label>
+        <!-- Teléfono secundario -->
+        <div>
+          <label class="label">Teléfono secundario <span class="text-slate-400 text-xs font-normal">(opcional)</span></label>
+          <div class="relative">
+            <Phone class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
-              v-model="form.whatsapp"
+              v-model="form.telefonoSecundario"
               type="tel"
               inputmode="numeric"
-              placeholder="3001234567"
-              class="input-field text-sm"
+              placeholder="6011234567"
+              class="input-field pl-11"
               maxlength="10"
             />
           </div>
@@ -182,9 +132,11 @@ async function handleRegister() {
 
         <div class="h-px bg-slate-100" />
 
-        <!-- Contraseña -->
+        <p class="text-xs text-slate-400 -mb-1">Deja la contraseña en blanco si no deseas cambiarla</p>
+
+        <!-- Nueva contraseña -->
         <div>
-          <label class="label">Contraseña <span class="text-danger">*</span></label>
+          <label class="label">Nueva contraseña</label>
           <div class="relative">
             <Lock class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -203,13 +155,13 @@ async function handleRegister() {
 
         <!-- Confirmar contraseña -->
         <div>
-          <label class="label">Confirmar contraseña <span class="text-danger">*</span></label>
+          <label class="label">Confirmar contraseña</label>
           <div class="relative">
             <Lock class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               v-model="form.confirmarClave"
               :type="showConfirm ? 'text' : 'password'"
-              placeholder="Repite tu contraseña"
+              placeholder="Repite la nueva contraseña"
               class="input-field pl-11 pr-11"
             />
             <button type="button" @click="showConfirm = !showConfirm"
@@ -220,17 +172,19 @@ async function handleRegister() {
           </div>
         </div>
 
+        <!-- Error -->
         <div v-if="error" class="text-danger text-sm text-center bg-danger-50 py-2.5 px-3 rounded-xl">
           {{ error }}
         </div>
 
-        <AppButton type="submit" :loading="loading" class="mt-1">
-          Crear cuenta
-        </AppButton>
+        <!-- Éxito -->
+        <div v-if="success" class="text-success text-sm text-center bg-success-50 py-2.5 px-3 rounded-xl font-medium">
+          ✓ Cambios guardados correctamente
+        </div>
 
-        <p class="text-center text-xs text-slate-400 pb-2">
-          Al registrarte aceptas nuestros <span class="text-primary-600">Términos y Condiciones</span>
-        </p>
+        <AppButton type="submit" :loading="loading" class="mt-1">
+          Guardar cambios
+        </AppButton>
 
       </form>
     </div>

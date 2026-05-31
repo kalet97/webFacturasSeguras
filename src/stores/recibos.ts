@@ -103,7 +103,7 @@ function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
   return {
     id: String(r.idRecibo),
     serviceType: inferServiceType(r.empresa_servicio, r.tipo_factura),
-    company: r.empresa_servicio?.nombre ?? r.nombre,
+    company: r.nombre || r.empresa_servicio?.nombre || '',
     clientNumber: r.codigoRecibo ?? String(r.idRecibo),
     dueDate: r.fechaMaxima ?? r.fechaOportuna ?? '',
     address: clienteAddress,
@@ -142,6 +142,23 @@ export const useRecibosStore = defineStore('recibos', () => {
     return recibos.value.find(r => r.id === id)
   }
 
+  async function createRecibo(payload: {
+    idEmpresaServicio: number
+    idTipoFactura: number
+    idEstadoRecibo: number
+    codigoRecibo: string
+    nombre: string
+    precio: number | null
+    fechaOportuna: string | null
+    fechaMaxima: string | null
+    fechaSuspencion: string | null
+    observacion: string | null
+  }): Promise<void> {
+    const auth = useAuthStore()
+    await api.post('/recibos', { ...payload, idCliente: auth.user!.idCliente }, auth.token)
+    await fetchRecibos()
+  }
+
   function addRecibo(data: Omit<Recibo, 'id' | 'status' | 'daysLeft' | 'notifications'>) {
     const dueDate = new Date(data.dueDate)
     const daysLeft = Math.ceil((dueDate.getTime() - Date.now()) / 86_400_000)
@@ -178,7 +195,7 @@ export const useRecibosStore = defineStore('recibos', () => {
 
   return {
     recibos, history, loading,
-    fetchRecibos, getReciboById, addRecibo, updateRecibo,
+    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo,
     serviceLabels, serviceIcons, serviceColors,
   }
 })

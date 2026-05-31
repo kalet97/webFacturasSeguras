@@ -4,9 +4,12 @@ import { api } from '@/services/api'
 
 export interface User {
   idCliente: number
-  name: string
-  phone: string
-  address: string
+  nombre: string
+  apellido: string
+  name: string       // nombre + apellido — usado por las vistas existentes
+  phone: string      // telefonoPrincipal
+  telefonoSecundario: string | null
+  address: string    // direccion
   correo: string
   role: 'client' | 'admin'
 }
@@ -17,32 +20,36 @@ interface ClienteResponse {
   apellido: string
   correo: string
   telefonoPrincipal: number
+  telefonoSecundario: number | null
   direccion: string | null
   activo: number
 }
 
 function mapCliente(c: ClienteResponse): User {
   return {
-    idCliente: c.idCliente,
-    name: `${c.nombre} ${c.apellido}`,
-    phone: String(c.telefonoPrincipal),
-    address: c.direccion ?? '',
-    correo: c.correo,
-    role: 'client',
+    idCliente:          c.idCliente,
+    nombre:             c.nombre,
+    apellido:           c.apellido,
+    name:               `${c.nombre} ${c.apellido}`,
+    phone:              String(c.telefonoPrincipal),
+    telefonoSecundario: c.telefonoSecundario ? String(c.telefonoSecundario) : null,
+    address:            c.direccion ?? '',
+    correo:             c.correo,
+    role:               'client',
   }
 }
 
-const USER_KEY = 'auth_user'
+const USER_KEY  = 'auth_user'
 const TOKEN_KEY = 'token'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
-  const user = ref<User | null>((() => {
+  const user  = ref<User | null>((() => {
     try { return JSON.parse(localStorage.getItem(USER_KEY) ?? 'null') } catch { return null }
   })())
 
   const isAuthenticated = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  const isAdmin         = computed(() => user.value?.role === 'admin')
 
   async function login(cedula: string, password: string): Promise<void> {
     const res = await api.post<{ token: string; cliente: ClienteResponse }>(
@@ -50,7 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
       { cedula: Number(cedula), clave: password },
     )
     token.value = res.token
-    user.value = mapCliente(res.cliente)
+    user.value  = mapCliente(res.cliente)
     localStorage.setItem(TOKEN_KEY, res.token)
     localStorage.setItem(USER_KEY, JSON.stringify(user.value))
   }
@@ -58,29 +65,56 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     await api.post('/auth/logout', {}, token.value).catch(() => {})
     token.value = null
-    user.value = null
+    user.value  = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
   }
 
   function restoreSession(): void {
     const savedToken = localStorage.getItem(TOKEN_KEY)
-    const savedUser = localStorage.getItem(USER_KEY)
+    const savedUser  = localStorage.getItem(USER_KEY)
     if (savedToken && savedUser) {
       try {
         token.value = savedToken
-        user.value = JSON.parse(savedUser)
+        user.value  = JSON.parse(savedUser)
       } catch {
         token.value = null
-        user.value = null
+        user.value  = null
       }
     }
   }
 
-  // TODO: conectar a POST /api/clientes cuando se integre el registro
-  async function register(_data: { name: string; phone: string; address: string }): Promise<void> {
-    throw new Error('Registro no disponible aún')
+  async function register(data: {
+    nombre: string
+    apellido: string
+    cedula: number
+    correo: string
+    clave: string
+    telefonoPrincipal: number
+    telefonoSecundario?: number | null
+    whatsapp?: number | null
+    direccion?: string
+  }): Promise<void> {
+    await api.post('/clientes', data)
+    await login(String(data.cedula), data.clave)
   }
 
-  return { user, token, isAuthenticated, isAdmin, login, logout, restoreSession, register }
+  async function updateProfile(data: {
+    nombre?: string
+    apellido?: string
+    telefonoPrincipal?: number
+    telefonoSecundario?: number | null
+    direccion?: string
+    clave?: string
+  }): Promise<void> {
+    const updated = await api.put<ClienteResponse>(
+      `/clientes/${user.value!.idCliente}`,
+      data,
+      token.value,
+    )
+    user.value = mapCliente(updated)
+    localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+  }
+
+  return { user, token, isAuthenticated, isAdmin, login, logout, restoreSession, register, updateProfile }
 })

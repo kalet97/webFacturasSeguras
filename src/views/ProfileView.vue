@@ -41,7 +41,7 @@ function getInitials(name?: string) {
             {{ auth.isAdmin ? 'Administrador' : 'Cliente' }}
           </span>
         </div>
-        <button class="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
+        <button @click="router.push('/profile/edit')" class="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
           <User class="w-4 h-4 text-slate-600" />
         </button>
       </div>
@@ -57,7 +57,7 @@ function getInitials(name?: string) {
               <p class="text-xs text-slate-400">Nombre completo</p>
               <p class="text-sm font-medium text-slate-700">{{ auth.user?.name }}</p>
             </div>
-            <button class="text-slate-400 hover:text-slate-600"><ChevronRight class="w-4 h-4" /></button>
+            <button @click="router.push('/profile/edit')" class="text-slate-400 hover:text-slate-600"><ChevronRight class="w-4 h-4" /></button>
           </div>
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 bg-primary-50 rounded-xl flex items-center justify-center shrink-0">
@@ -67,7 +67,7 @@ function getInitials(name?: string) {
               <p class="text-xs text-slate-400">Dirección</p>
               <p class="text-sm font-medium text-slate-700">{{ auth.user?.address }}</p>
             </div>
-            <button class="text-slate-400 hover:text-slate-600"><ChevronRight class="w-4 h-4" /></button>
+            <button @click="router.push('/profile/edit')" class="text-slate-400 hover:text-slate-600"><ChevronRight class="w-4 h-4" /></button>
           </div>
         </div>
       </div>
@@ -85,7 +85,18 @@ function getInitials(name?: string) {
             </div>
             <span class="text-xs bg-success-50 text-success font-medium px-2 py-0.5 rounded-full">Activo</span>
           </div>
-          <button class="flex items-center gap-3 w-full text-left border-2 border-dashed border-slate-200 rounded-xl p-3 hover:border-primary-300 transition-colors">
+          <div v-if="auth.user?.telefonoSecundario" class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+              <Phone class="w-4 h-4 text-slate-400" />
+            </div>
+            <div class="flex-1">
+              <p class="text-xs text-slate-400">Secundario</p>
+              <p class="text-sm font-medium text-slate-700">{{ auth.user.telefonoSecundario }}</p>
+            </div>
+            <button @click="router.push('/profile/edit')" class="text-slate-400 hover:text-slate-600"><ChevronRight class="w-4 h-4" /></button>
+          </div>
+          <button v-else @click="router.push('/profile/edit')"
+            class="flex items-center gap-3 w-full text-left border-2 border-dashed border-slate-200 rounded-xl p-3 hover:border-primary-300 transition-colors">
             <div class="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
               <Phone class="w-4 h-4 text-slate-400" />
             </div>

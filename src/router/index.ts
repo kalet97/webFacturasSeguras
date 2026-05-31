@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/recibos/:id/payment', name: 'request-payment', component: () => import('@/views/RequestPaymentView.vue') },
     { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue') },
     { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
+    { path: '/profile/edit', name: 'edit-profile', component: () => import('@/views/EditProfileView.vue') },
     { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue') },
   ],
 })
