@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import {
   Search, FileText, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
-  Building2, Calendar, Hash, MessageCircle,
+  Building2, Calendar, Hash, MessageCircle, CheckCircle,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -54,6 +54,44 @@ function openDetail(r: Recibo) {
   showPanel.value = true
 }
 function closePanel() { showPanel.value = false }
+
+// --- Confirmación marcar como pagado ---
+const confirmRecibo  = ref<Recibo | null>(null)
+const showConfirm    = ref(false)
+const confirmLoading = ref(false)
+const confirmError   = ref('')
+
+function openConfirmPago(r: Recibo) {
+  confirmRecibo.value = r
+  confirmError.value  = ''
+  showConfirm.value   = true
+}
+
+function closeConfirm() {
+  showConfirm.value   = false
+  confirmRecibo.value = null
+  confirmError.value  = ''
+}
+
+async function markAsPagado() {
+  if (!confirmRecibo.value) return
+  confirmLoading.value = true
+  confirmError.value   = ''
+  try {
+    await api.put(`/recibos/${confirmRecibo.value.idRecibo}`, { idEstadoRecibo: 2 }, adminAuth.token)
+    const estadoPagado = estados.value.find(e => e.idEstadoRecibo === 2) ?? { idEstadoRecibo: 2, nombre: 'Pagado', color: null }
+    const idx = recibos.value.findIndex(r => r.idRecibo === confirmRecibo.value!.idRecibo)
+    if (idx !== -1) recibos.value[idx] = { ...recibos.value[idx], estado_recibo: estadoPagado }
+    if (selected.value?.idRecibo === confirmRecibo.value.idRecibo) {
+      selected.value = { ...selected.value, estado_recibo: estadoPagado }
+    }
+    closeConfirm()
+  } catch (e: unknown) {
+    confirmError.value = e instanceof Error ? e.message : 'Error al actualizar el recibo'
+  } finally {
+    confirmLoading.value = false
+  }
+}
 
 // --- Fetch ---
 async function fetchEstados() {
@@ -197,6 +235,7 @@ const pages = computed(() => {
                 <th class="text-left px-5 py-3.5">Tipo</th>
                 <th class="text-right px-5 py-3.5">Valor</th>
                 <th class="text-left px-5 py-3.5">Fecha límite</th>
+                <th class="text-right px-5 py-3.5">Días</th>
                 <th class="text-left px-5 py-3.5">Estado</th>
                 <th class="px-5 py-3.5"></th>
               </tr>
@@ -240,6 +279,27 @@ const pages = computed(() => {
                   {{ formatFecha(recibo.fechaMaxima) }}
                 </td>
 
+                <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                  <template v-if="['pagado', 'pago', 'paid', 'cancelado'].some(p => (recibo.estado_recibo?.nombre ?? '').toLowerCase().includes(p))">
+                    <span class="text-slate-300 text-sm">—</span>
+                  </template>
+                  <template v-else-if="daysLeft(recibo.fechaMaxima) === null">
+                    <span class="text-slate-300 text-sm">—</span>
+                  </template>
+                  <template v-else>
+                    <span :class="[
+                      'text-sm font-medium tabular-nums',
+                      daysLeft(recibo.fechaMaxima)! < 0  ? 'text-danger' :
+                      daysLeft(recibo.fechaMaxima)! <= 5 ? 'text-warning-600' :
+                                                           'text-slate-600'
+                    ]">
+                      {{ daysLeft(recibo.fechaMaxima)! < 0
+                          ? `−${Math.abs(daysLeft(recibo.fechaMaxima)!)}d`
+                          : `${daysLeft(recibo.fechaMaxima)}d` }}
+                    </span>
+                  </template>
+                </td>
+
                 <td class="px-5 py-3.5">
                   <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap', statusClass(recibo)]">
                     {{ statusLabel(recibo) }}
@@ -247,13 +307,23 @@ const pages = computed(() => {
                 </td>
 
                 <td class="px-5 py-3.5 text-right">
-                  <button
-                    @click="openDetail(recibo)"
-                    class="text-slate-400 hover:text-primary-600 transition p-1.5 rounded-lg hover:bg-primary-50"
-                    title="Ver detalle"
-                  >
-                    <Eye class="w-4 h-4" />
-                  </button>
+                  <div class="flex items-center justify-end gap-1">
+                    <button
+                      v-if="recibo.estado_recibo?.idEstadoRecibo === 1"
+                      @click="openConfirmPago(recibo)"
+                      class="text-slate-400 hover:text-success-600 transition p-1.5 rounded-lg hover:bg-success-50"
+                      title="Marcar como pagado"
+                    >
+                      <CheckCircle class="w-4 h-4" />
+                    </button>
+                    <button
+                      @click="openDetail(recibo)"
+                      class="text-slate-400 hover:text-primary-600 transition p-1.5 rounded-lg hover:bg-primary-50"
+                      title="Ver detalle"
+                    >
+                      <Eye class="w-4 h-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -279,6 +349,83 @@ const pages = computed(() => {
       </template>
     </div>
   </div>
+
+  <!-- ===================== Modal confirmar pago ===================== -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showConfirm && confirmRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeConfirm" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div class="flex flex-col items-center text-center gap-4">
+
+            <div class="w-14 h-14 bg-success-50 rounded-full flex items-center justify-center">
+              <CheckCircle class="w-7 h-7 text-success-600" />
+            </div>
+
+            <div class="w-full">
+              <h3 class="font-semibold text-slate-800 text-base">¿Marcar como pagado?</h3>
+              <p class="text-slate-500 text-sm mt-1 mb-4">
+                Esta acción no se puede deshacer.
+              </p>
+
+              <div class="bg-slate-50 rounded-xl divide-y divide-slate-100 text-left">
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Recibo</span>
+                  <span class="text-sm font-medium text-slate-800">{{ confirmRecibo.nombre }}</span>
+                </div>
+                <div v-if="confirmRecibo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Código</span>
+                  <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.codigoRecibo }}</span>
+                </div>
+                <div v-if="confirmRecibo.tipo_factura" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Tipo de factura</span>
+                  <span class="text-sm text-slate-700">{{ confirmRecibo.tipo_factura.nombre }}</span>
+                </div>
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Valor</span>
+                  <span class="text-sm font-semibold text-slate-800">{{ formatPrecio(confirmRecibo.precio) }}</span>
+                </div>
+                <div v-if="confirmRecibo.cliente" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Cliente</span>
+                  <span class="text-sm text-slate-700">{{ clienteNombre(confirmRecibo) }}</span>
+                </div>
+                <div v-if="confirmRecibo.cliente" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Teléfono</span>
+                  <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.cliente.telefonoPrincipal }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="confirmError" class="w-full flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> {{ confirmError }}
+            </div>
+
+            <div class="flex gap-3 w-full pt-1">
+              <button
+                @click="closeConfirm"
+                :disabled="confirmLoading"
+                class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                @click="markAsPagado"
+                :disabled="confirmLoading"
+                class="flex-1 py-2.5 text-sm font-medium text-white bg-success-600 hover:bg-success-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                <svg v-if="confirmLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                {{ confirmLoading ? 'Guardando...' : 'Sí, marcar pagado' }}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <!-- ===================== Panel de detalle ===================== -->
   <Teleport to="body">
@@ -494,6 +641,23 @@ const pages = computed(() => {
 </template>
 
 <style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-active .relative,
+.modal-leave-active .relative {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .relative {
+  transform: scale(0.95);
+  opacity: 0;
+}
+
 .drawer-enter-active,
 .drawer-leave-active {
   transition: opacity 0.25s ease;
