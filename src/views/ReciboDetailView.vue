@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MapPin, Hash, Calendar, Edit2, CreditCard } from 'lucide-vue-next'
+import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import AppHeader from '@/components/AppHeader.vue'
 import PaymentStatus from '@/components/PaymentStatus.vue'
@@ -16,7 +16,32 @@ const store = useRecibosStore()
 const id = route.params.id as string
 const recibo = computed(() => store.getReciboById(id))
 
-const showPayModal = ref(false)
+const showPayModal  = ref(false)
+const editingName   = ref(false)
+const nameInput     = ref('')
+const savingName    = ref(false)
+
+function startEditName() {
+  nameInput.value = recibo.value!.company
+  editingName.value = true
+}
+
+function cancelEditName() {
+  editingName.value = false
+  nameInput.value = ''
+}
+
+async function saveEditName() {
+  const trimmed = nameInput.value.trim()
+  if (!trimmed || trimmed === recibo.value!.company) { cancelEditName(); return }
+  savingName.value = true
+  try {
+    await store.renameRecibo(id, trimmed)
+    editingName.value = false
+  } finally {
+    savingName.value = false
+  }
+}
 
 function formatCurrency(v?: number) {
   if (!v) return '—'
@@ -36,7 +61,7 @@ function handleMarkPaid() {
 
 <template>
   <div v-if="recibo" class="screen">
-    <AppHeader :title="recibo.company" :show-menu="true" />
+    <AppHeader :title="editingName ? 'Editar nombre' : recibo.company" :show-menu="true" />
 
     <div class="flex-1 overflow-y-auto px-4 pb-8">
       <div class="card mb-4">
@@ -46,8 +71,33 @@ function handleMarkPaid() {
           >
             {{ store.serviceIcons[recibo.serviceType] }}
           </div>
-          <div>
-            <h2 class="font-bold text-slate-800 text-lg">{{ recibo.company }}</h2>
+          <div class="flex-1 min-w-0">
+            <!-- Modo edición -->
+            <div v-if="editingName" class="flex items-center gap-1.5">
+              <input
+                v-model="nameInput"
+                type="text"
+                class="input-field py-1.5 text-base font-bold flex-1 min-w-0"
+                @keyup.enter="saveEditName"
+                @keyup.escape="cancelEditName"
+                autofocus
+              />
+              <button @click="saveEditName" :disabled="savingName"
+                class="w-8 h-8 bg-success rounded-xl flex items-center justify-center shrink-0">
+                <Check class="w-4 h-4 text-white" />
+              </button>
+              <button @click="cancelEditName"
+                class="w-8 h-8 bg-slate-200 rounded-xl flex items-center justify-center shrink-0">
+                <X class="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+            <!-- Modo lectura -->
+            <div v-else class="flex items-center gap-1.5">
+              <h2 class="font-bold text-slate-800 text-lg truncate">{{ recibo.company }}</h2>
+              <button @click="startEditName" class="shrink-0 text-slate-400 hover:text-primary-600 transition-colors">
+                <Edit2 class="w-4 h-4" />
+              </button>
+            </div>
             <p class="text-sm text-slate-500">{{ store.serviceLabels[recibo.serviceType] }}</p>
           </div>
           <div class="ml-auto">

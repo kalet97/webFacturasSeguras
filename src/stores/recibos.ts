@@ -171,6 +171,12 @@ export const useRecibosStore = defineStore('recibos', () => {
     return newRecibo
   }
 
+  async function renameRecibo(id: string, nombre: string): Promise<void> {
+    const auth = useAuthStore()
+    await api.put(`/recibos/${id}`, { nombre }, auth.token)
+    updateRecibo(id, { company: nombre })
+  }
+
   function updateRecibo(id: string, updates: Partial<Recibo>) {
     const index = recibos.value.findIndex(r => r.id === id)
     if (index !== -1) recibos.value[index] = { ...recibos.value[index], ...updates }
@@ -195,7 +201,7 @@ export const useRecibosStore = defineStore('recibos', () => {
 
   return {
     recibos, history, loading,
-    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo,
+    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo,
     serviceLabels, serviceIcons, serviceColors,
   }
 })
