@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
-export type ReciboStatus = 'pending' | 'soon' | 'overdue' | 'paid'
+export type ReciboStatus = 'pending' | 'soon' | 'overdue' | 'paid' | 'processing'
 export type ServiceType = 'energia' | 'agua' | 'gas' | 'internet' | 'telefono' | 'tv'
 
 export interface Notification {
@@ -116,6 +116,8 @@ function parseDate(s: string) {
 }
 
 function calcStatus(api: ApiRecibo): ReciboStatus {
+  if (api.estado_recibo?.idEstadoRecibo === 4) return 'processing'
+
   const estadoNombre = (api.estado_recibo?.nombre ?? '').toLowerCase()
   if (PAID_NAMES.some(p => estadoNombre.includes(p))) return 'paid'
 

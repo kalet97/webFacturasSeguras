@@ -1,20 +1,48 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X } from 'lucide-vue-next'
+import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X, ArrowUpFromLine, Clock } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
+import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
 import AppHeader from '@/components/AppHeader.vue'
 import PaymentStatus from '@/components/PaymentStatus.vue'
-import ActivityTimeline from '@/components/ActivityTimeline.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 
-const route = useRoute()
+const route  = useRoute()
 const router = useRouter()
-const store = useRecibosStore()
+const store  = useRecibosStore()
+const auth   = useAuthStore()
 
-const id = route.params.id as string
+const id     = route.params.id as string
 const recibo = computed(() => store.getReciboById(id))
+
+interface Transaccion {
+  idHistorialPagoRecibo: number
+  valorRecibo: number
+  comision: number | null
+  valorTotal: number
+  pagado: number
+  fechaSolicitud: string | null
+  fechaPago: string | null
+  idUsuario: number | null
+}
+
+const transacciones     = ref<Transaccion[]>([])
+const loadingTransacc   = ref(false)
+
+onMounted(async () => {
+  loadingTransacc.value = true
+  try {
+    transacciones.value = await api.get<Transaccion[]>(
+      `/historial-pago-recibos?idRecibo=${id}`,
+      auth.token,
+    )
+  } finally {
+    loadingTransacc.value = false
+  }
+})
 
 const showPayModal  = ref(false)
 const markingPaid   = ref(false)
@@ -164,11 +192,69 @@ async function handleMarkPaid() {
       </div>
 
       <div class="card mb-4">
-        <h3 class="font-bold text-slate-800 mb-4">Historial de actividad</h3>
-        <ActivityTimeline :items="recibo.notifications" />
+        <h3 class="font-bold text-slate-800 mb-4">Historial de transacciones</h3>
+
+        <div v-if="loadingTransacc" class="flex justify-center py-6">
+          <div class="w-6 h-6 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+        </div>
+
+        <div v-else-if="transacciones.length === 0" class="text-center py-6">
+          <p class="text-sm text-slate-400">Sin transacciones registradas</p>
+        </div>
+
+        <div v-else class="flex flex-col gap-4">
+          <div
+            v-for="(t, i) in transacciones"
+            :key="t.idHistorialPagoRecibo"
+            class="flex gap-3 relative"
+          >
+            <!-- Línea conectora -->
+            <div class="flex flex-col items-center shrink-0">
+              <div :class="['w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.pagado ? 'bg-success-50' : 'bg-violet-50']">
+                <component :is="t.pagado ? ArrowUpFromLine : Clock" :class="['w-4 h-4', t.pagado ? 'text-success' : 'text-violet-500']" />
+              </div>
+              <div v-if="i < transacciones.length - 1" class="w-px flex-1 bg-slate-100 mt-1 min-h-[16px]" />
+            </div>
+
+            <div class="flex-1 pb-1">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-slate-800">
+                  {{ t.idUsuario === null ? 'Pago directo' : 'Pago por encargo' }}
+                </p>
+                <span :class="['text-xs font-medium px-2 py-0.5 rounded-full', t.pagado ? 'bg-success-50 text-success-600' : 'bg-violet-50 text-violet-600']">
+                  {{ t.pagado ? 'Completado' : 'En trámite' }}
+                </span>
+              </div>
+
+              <div class="mt-1.5 bg-slate-50 rounded-xl px-3 py-2 space-y-1">
+                <div class="flex justify-between text-xs">
+                  <span class="text-slate-400">Valor recibo</span>
+                  <span class="font-medium text-slate-700">{{ formatCurrency(t.valorRecibo) }}</span>
+                </div>
+                <template v-if="t.comision">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-slate-400">Comisión</span>
+                    <span class="font-medium text-slate-700">{{ formatCurrency(t.comision) }}</span>
+                  </div>
+                  <div class="flex justify-between text-xs border-t border-slate-100 pt-1">
+                    <span class="text-slate-500 font-medium">Total</span>
+                    <span class="font-bold text-slate-800">{{ formatCurrency(t.valorTotal) }}</span>
+                  </div>
+                </template>
+              </div>
+
+              <p class="text-xs text-slate-400 mt-1.5">
+                Solicitado: {{ t.fechaSolicitud ? formatDate(t.fechaSolicitud) : '—' }}
+                <template v-if="t.pagado && t.fechaPago">
+                  · Pagado: {{ formatDate(t.fechaPago) }}
+                </template>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="flex flex-col gap-3" v-if="recibo.status !== 'paid'">
+      <div class="flex flex-col gap-3" v-if="recibo.status !== 'paid' && recibo.status !== 'processing'">
         <AppButton @click="router.push(`/recibos/${id}/payment`)">
           <CreditCard class="w-5 h-5" />
           Solicitar pago por encargo
@@ -177,6 +263,12 @@ async function handleMarkPaid() {
           <Edit2 class="w-5 h-5" />
           Marcar como pagado
         </AppButton>
+      </div>
+
+      <div v-else-if="recibo.status === 'processing'" class="card text-center py-6 border border-violet-100 bg-violet-50">
+        <p class="text-3xl mb-2">⏳</p>
+        <p class="font-semibold text-violet-700">Pago en trámite</p>
+        <p class="text-sm text-slate-500 mt-1">Recibimos tu pago y estamos pagando<br>la factura al servicio correspondiente</p>
       </div>
 
       <div v-else class="card text-center py-6">

@@ -26,17 +26,21 @@ function daysLabel(days: number) {
 }
 
 const daysColor: Record<string, string> = {
-  overdue: 'text-danger',
-  soon: 'text-warning-600',
-  pending: 'text-slate-500',
-  paid: 'text-success',
+  overdue:    'text-danger',
+  soon:       'text-warning-600',
+  pending:    'text-slate-500',
+  paid:       'text-success',
+  processing: 'text-violet-600',
 }
 </script>
 
 <template>
   <button
     @click="router.push(`/recibos/${props.recibo.id}`)"
-    class="card w-full text-left hover:shadow-card-hover transition-shadow duration-200 active:scale-[0.99]"
+    :class="[
+      'card w-full text-left hover:shadow-card-hover transition-shadow duration-200 active:scale-[0.99] overflow-hidden',
+      props.recibo.status === 'processing' ? 'ring-2 ring-violet-300' : '',
+    ]"
   >
     <div class="flex items-center gap-3">
       <div
@@ -54,12 +58,23 @@ const daysColor: Record<string, string> = {
         <div class="flex items-center justify-between mt-1.5">
           <p class="text-base font-bold text-slate-800">{{ formatCurrency(props.recibo.amount) }}</p>
           <p :class="['text-xs font-medium', daysColor[props.recibo.status]]">
-            {{ props.recibo.status === 'paid' ? 'Pagado ✓' : daysLabel(props.recibo.daysLeft) }}
+            {{ props.recibo.status === 'paid'       ? 'Pagado ✓'
+             : props.recibo.status === 'processing' ? 'Procesando pago...'
+             : daysLabel(props.recibo.daysLeft) }}
           </p>
         </div>
       </div>
 
       <ChevronRight class="w-4 h-4 text-slate-300 shrink-0" />
+    </div>
+
+    <!-- Banner informativo para estado processing -->
+    <div
+      v-if="props.recibo.status === 'processing'"
+      class="mt-3 -mx-4 -mb-4 px-4 py-2.5 bg-violet-50 border-t border-violet-100 flex items-center gap-2"
+    >
+      <span class="w-2 h-2 rounded-full bg-violet-500 animate-pulse shrink-0" />
+      <p class="text-xs text-violet-700 font-medium">Tu pago fue recibido · Estamos pagando tu factura</p>
     </div>
   </button>
 </template>

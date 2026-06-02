@@ -212,7 +212,7 @@ async function confirmarPagoEncargo() {
       historialPago.value
         ? api.put(
             `/historial-pago-recibos/${historialPago.value.idHistorialPagoRecibo}`,
-            { pagado: 1, idUsuario: adminAuth.user?.idUsuario, fechaPago: new Date().toISOString() },
+            { pagado: 1, idUsuario: adminAuth.user?.idUsuario },
             adminAuth.token,
           )
         : Promise.resolve(),

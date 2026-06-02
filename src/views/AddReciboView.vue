@@ -9,18 +9,21 @@ import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 
 const router = useRouter()
-const store = useRecibosStore()
-const auth = useAuthStore()
+const store  = useRecibosStore()
+const auth   = useAuthStore()
 
-interface Option { id: number; nombre: string; color?: string | null }
+interface EmpresaOption {
+  id: number
+  nombre: string
+  color: string | null
+  idTipoFactura: number | null
+}
 
-const empresas   = ref<Option[]>([])
-const tipos      = ref<Option[]>([])
+const empresas        = ref<EmpresaOption[]>([])
 const loadingCatalogos = ref(true)
 
 const form = ref({
   idEmpresaServicio: '',
-  idTipoFactura:     '',
   codigoRecibo:      '',
   nombre:            '',
   precio:            '',
@@ -36,37 +39,42 @@ const precioDisplay = ref('')
 
 function onPrecioInput(e: Event) {
   const digits = (e.target as HTMLInputElement).value.replace(/\D/g, '')
-  form.value.precio  = digits
+  form.value.precio   = digits
   precioDisplay.value = digits ? Number(digits).toLocaleString('es-CO') : ''
   ;(e.target as HTMLInputElement).value = precioDisplay.value
 }
 
 onMounted(async () => {
   try {
-    const [e, t] = await Promise.all([
-      api.get<{ idEmpresaServicio: number; nombre: string; color: string | null }[]>('/empresas-servicios', auth.token),
-      api.get<{ idTipoFactura: number; nombre: string; color: string | null }[]>('/tipo-facturas', auth.token),
-    ])
-    empresas.value = e.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color }))
-    tipos.value    = t.map(x => ({ id: x.idTipoFactura,     nombre: x.nombre, color: x.color }))
+    const data = await api.get<{ idEmpresaServicio: number; nombre: string; color: string | null; idTipoFactura: number | null }[]>(
+      '/empresas-servicios',
+      auth.token,
+    )
+    empresas.value = data.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color, idTipoFactura: x.idTipoFactura }))
   } finally {
     loadingCatalogos.value = false
   }
 })
 
 async function handleSave() {
-  if (!form.value.idEmpresaServicio || !form.value.idTipoFactura ||
-      !form.value.codigoRecibo      || !form.value.nombre        ||
-      !form.value.precio            || !form.value.fechaMaxima) {
+  if (!form.value.idEmpresaServicio || !form.value.codigoRecibo ||
+      !form.value.nombre            || !form.value.precio       || !form.value.fechaMaxima) {
     error.value = 'Completa los campos obligatorios'
     return
   }
-  error.value = ''
+
+  const empresa = empresas.value.find(e => e.id === Number(form.value.idEmpresaServicio))
+  if (!empresa?.idTipoFactura) {
+    error.value = 'La empresa seleccionada no tiene un tipo de factura configurado. Contacta al administrador.'
+    return
+  }
+
+  error.value   = ''
   loading.value = true
   try {
     await store.createRecibo({
-      idEmpresaServicio: Number(form.value.idEmpresaServicio),
-      idTipoFactura:     Number(form.value.idTipoFactura),
+      idEmpresaServicio: empresa.id,
+      idTipoFactura:     empresa.idTipoFactura,
       idEstadoRecibo:    1,
       codigoRecibo:      form.value.codigoRecibo,
       nombre:            form.value.nombre,
@@ -109,18 +117,6 @@ async function handleSave() {
               <select v-model="form.idEmpresaServicio" class="input-field appearance-none pr-10">
                 <option value="" disabled>Selecciona una empresa</option>
                 <option v-for="e in empresas" :key="e.id" :value="e.id">{{ e.nombre }}</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Tipo de factura -->
-          <div>
-            <label class="label">Tipo de factura <span class="text-danger">*</span></label>
-            <div class="relative">
-              <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <select v-model="form.idTipoFactura" class="input-field appearance-none pr-10">
-                <option value="" disabled>Selecciona el tipo</option>
-                <option v-for="t in tipos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
               </select>
             </div>
           </div>

@@ -5,8 +5,8 @@ import { useAdminAuthStore } from '@/stores/adminAuth'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/splash' },
-    { path: '/splash',        name: 'splash',        component: () => import('@/views/SplashView.vue'),       meta: { public: true } },
+    { path: '/',       name: 'landing', component: () => import('@/views/LandingView.vue'),  meta: { public: true, fullscreen: true } },
+    { path: '/splash', name: 'splash',  component: () => import('@/views/SplashView.vue'), meta: { public: true } },
     { path: '/login',         name: 'login',         component: () => import('@/views/LoginView.vue'),        meta: { public: true } },
     { path: '/register',      name: 'register',      component: () => import('@/views/RegisterView.vue'),     meta: { public: true } },
     { path: '/dashboard',     name: 'dashboard',     component: () => import('@/views/DashboardView.vue') },

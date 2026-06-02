@@ -29,6 +29,11 @@ const config: Record<ReciboStatus, { label: string; classes: string; dot: string
     classes: 'bg-success-100 text-success-600',
     dot: 'bg-success',
   },
+  processing: {
+    label: 'En trámite',
+    classes: 'bg-violet-100 text-violet-700',
+    dot: 'bg-violet-500 animate-pulse',
+  },
 }
 </script>
 

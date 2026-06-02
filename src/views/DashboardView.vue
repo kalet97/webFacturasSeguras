@@ -52,7 +52,7 @@ function greeting() {
 }
 
 const sortedRecibos = computed(() => {
-  const order = { overdue: 0, soon: 1, pending: 2, paid: 3 }
+  const order = { overdue: 0, soon: 1, processing: 2, pending: 3, paid: 4 }
   return [...store.recibos].sort((a, b) => order[a.status] - order[b.status])
 })
 </script>

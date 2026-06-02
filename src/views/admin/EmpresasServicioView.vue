@@ -1,26 +1,45 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Plus, Pencil, AlertCircle, RefreshCw } from 'lucide-vue-next'
+import { Plus, Pencil, AlertCircle, RefreshCw, ChevronDown } from 'lucide-vue-next'
 import CrudModal from '@/components/admin/CrudModal.vue'
 import { useAdminCrud } from '@/composables/admin/useAdminCrud'
+import { api } from '@/services/api'
+import { useAdminAuthStore } from '@/stores/adminAuth'
 
-interface EmpresaServicio { idEmpresaServicio: number; nombre: string; color: string | null; activo: number; link: string | null }
+interface TipoFactura { idTipoFactura: number; nombre: string }
+interface EmpresaServicio {
+  idEmpresaServicio: number
+  nombre: string
+  color: string | null
+  activo: number
+  link: string | null
+  idTipoFactura: number | null
+  tipo_factura: TipoFactura | null
+}
 
+const adminAuth = useAdminAuthStore()
 const { items, loading, saving, error, formError, fetchAll, save } = useAdminCrud<EmpresaServicio>('/empresas-servicios')
 
-const showModal = ref(false)
-const editing   = ref<EmpresaServicio | null>(null)
-const form      = ref({ nombre: '', color: '#6366f1', activo: true, link: '' })
+const tiposFactura = ref<TipoFactura[]>([])
+const showModal    = ref(false)
+const editing      = ref<EmpresaServicio | null>(null)
+const form         = ref({ nombre: '', color: '#6366f1', activo: true, link: '', idTipoFactura: '' })
 
 function openCreate() {
   editing.value = null
-  form.value = { nombre: '', color: '#6366f1', activo: true, link: '' }
+  form.value = { nombre: '', color: '#6366f1', activo: true, link: '', idTipoFactura: '' }
   showModal.value = true
 }
 
 function openEdit(item: EmpresaServicio) {
   editing.value = item
-  form.value = { nombre: item.nombre, color: item.color ?? '#6366f1', activo: Boolean(item.activo), link: item.link ?? '' }
+  form.value = {
+    nombre:         item.nombre,
+    color:          item.color ?? '#6366f1',
+    activo:         Boolean(item.activo),
+    link:           item.link ?? '',
+    idTipoFactura:  item.idTipoFactura ? String(item.idTipoFactura) : '',
+  }
   showModal.value = true
 }
 
@@ -28,13 +47,24 @@ function close() { showModal.value = false }
 
 async function submit() {
   const ok = await save(
-    { nombre: form.value.nombre, color: form.value.color, activo: form.value.activo ? 1 : 0, link: form.value.link.trim() || null },
+    {
+      nombre:        form.value.nombre,
+      color:         form.value.color,
+      activo:        form.value.activo ? 1 : 0,
+      link:          form.value.link.trim() || null,
+      idTipoFactura: form.value.idTipoFactura ? Number(form.value.idTipoFactura) : null,
+    },
     editing.value?.idEmpresaServicio,
   )
   if (ok) close()
 }
 
-onMounted(fetchAll)
+onMounted(async () => {
+  fetchAll()
+  try {
+    tiposFactura.value = await api.get<TipoFactura[]>('/tipo-facturas', adminAuth.token)
+  } catch {}
+})
 </script>
 
 <template>
@@ -67,6 +97,7 @@ onMounted(fetchAll)
           <tr class="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
             <th class="text-left px-5 py-3.5">ID</th>
             <th class="text-left px-5 py-3.5">Nombre</th>
+            <th class="text-left px-5 py-3.5">Tipo factura</th>
             <th class="text-left px-5 py-3.5">Color</th>
             <th class="text-left px-5 py-3.5">Link de pago</th>
             <th class="text-left px-5 py-3.5">Estado</th>
@@ -75,11 +106,12 @@ onMounted(fetchAll)
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="items.length === 0">
-            <td colspan="6" class="text-center py-12 text-slate-400 text-sm">Sin registros</td>
+            <td colspan="7" class="text-center py-12 text-slate-400 text-sm">Sin registros</td>
           </tr>
           <tr v-for="item in items" :key="item.idEmpresaServicio" class="hover:bg-slate-50 transition-colors">
             <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ item.idEmpresaServicio }}</td>
             <td class="px-5 py-3.5 font-medium text-slate-800">{{ item.nombre }}</td>
+            <td class="px-5 py-3.5 text-slate-600 text-sm">{{ item.tipo_factura?.nombre ?? '—' }}</td>
             <td class="px-5 py-3.5">
               <div class="flex items-center gap-2">
                 <span class="w-5 h-5 rounded-full border border-slate-200" :style="{ background: item.color ?? '#ccc' }" />
@@ -120,6 +152,16 @@ onMounted(fetchAll)
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">Nombre <span class="text-danger">*</span></label>
           <input v-model="form.nombre" type="text" placeholder="Ej: EPM" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Tipo de factura</label>
+          <div class="relative">
+            <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <select v-model="form.idTipoFactura" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm appearance-none pr-10 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition">
+              <option value="">Sin tipo de factura</option>
+              <option v-for="t in tiposFactura" :key="t.idTipoFactura" :value="t.idTipoFactura">{{ t.nombre }}</option>
+            </select>
+          </div>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">Link de pago</label>
