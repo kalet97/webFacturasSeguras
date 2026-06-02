@@ -36,6 +36,37 @@ export interface HistoryItem {
   amount?: number
 }
 
+interface ApiTipoNotif { idTipoNotificacion: number; nombre: string; precio: number | null; requiereCobro: number }
+interface ApiReciboSimple { idRecibo: number; nombre: string }
+interface ApiHistorialNotificacion {
+  idHistorialNotificacion: number
+  idRecibo: number
+  observacion: string | null
+  fechaNotificacion: string | null
+  tipo_notificacion: ApiTipoNotif | null
+  recibo: ApiReciboSimple | null
+}
+
+function inferNotifType(nombre: string): HistoryItem['type'] {
+  const n = nombre.toLowerCase()
+  if (n.includes('llamada') || n.includes('call') || n.includes('telefon')) return 'call'
+  if (n.includes('visita') || n.includes('visit'))                           return 'visit'
+  if (n.includes('pago') || n.includes('cobro') || n.includes('payment'))   return 'payment'
+  return 'reminder'
+}
+
+function mapHistorial(h: ApiHistorialNotificacion): HistoryItem {
+  const tipoNombre = h.tipo_notificacion?.nombre ?? 'Notificación'
+  return {
+    id:          String(h.idHistorialNotificacion),
+    type:        inferNotifType(tipoNombre),
+    date:        h.fechaNotificacion ?? '',
+    description: h.observacion ?? tipoNombre,
+    reciboId:    String(h.idRecibo),
+    reciboName:  h.recibo?.nombre ?? `Recibo #${h.idRecibo}`,
+  }
+}
+
 // --- Mapeo desde la API ---
 
 interface ApiEmpresa  { idEmpresaServicio: number; nombre: string; color: string | null }
@@ -121,9 +152,10 @@ function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
 // --- Store ---
 
 export const useRecibosStore = defineStore('recibos', () => {
-  const recibos = ref<Recibo[]>([])
-  const history = ref<HistoryItem[]>([])
-  const loading = ref(false)
+  const recibos        = ref<Recibo[]>([])
+  const history        = ref<HistoryItem[]>([])
+  const loading        = ref(false)
+  const loadingHistory = ref(false)
 
   async function fetchRecibos() {
     const auth = useAuthStore()
@@ -181,10 +213,58 @@ export const useRecibosStore = defineStore('recibos', () => {
     updateRecibo(id, { company: nombre })
   }
 
-  async function markAsPaid(id: string): Promise<void> {
+  async function fetchHistory(): Promise<void> {
     const auth = useAuthStore()
-    await api.put(`/recibos/${id}`, { idEstadoRecibo: 2 }, auth.token)
+    if (!auth.user) return
+    loadingHistory.value = true
+    try {
+      const data = await api.get<ApiHistorialNotificacion[]>(
+        `/historial-notificaciones?idCliente=${auth.user.idCliente}`,
+        auth.token,
+      )
+      history.value = data.map(mapHistorial)
+    } finally {
+      loadingHistory.value = false
+    }
+  }
+
+  async function markAsPaid(id: string): Promise<void> {
+    const auth  = useAuthStore()
+    const valor = recibos.value.find(r => r.id === id)?.amount ?? 0
+    await Promise.all([
+      api.put(`/recibos/${id}`, { idEstadoRecibo: 2 }, auth.token),
+      api.post('/historial-pago-recibos', {
+        idRecibo:   Number(id),
+        idUsuario:  null,
+        valorRecibo: valor,
+        comision:   0,
+        valorTotal: valor,
+        pagado:     1,
+      }, auth.token),
+    ])
     updateRecibo(id, { status: 'paid', daysLeft: 0 })
+  }
+
+  async function requestPayment(id: string, valorRecibo: number, comision: number, file: File): Promise<void> {
+    const auth = useAuthStore()
+    const valorTotal = valorRecibo + comision
+
+    const formData = new FormData()
+    formData.append('archivo', file)
+    const { url } = await api.upload<{ url: string }>('/upload/comprobante', formData, auth.token)
+
+    await Promise.all([
+      api.post('/historial-pago-recibos', {
+        idRecibo: Number(id),
+        valorRecibo,
+        comision,
+        valorTotal,
+        pagado: 0,
+        urlComprobante: url,
+      }, auth.token),
+      api.put(`/recibos/${id}`, { idEstadoRecibo: 4 }, auth.token),
+    ])
+    await fetchRecibos()
   }
 
   function updateRecibo(id: string, updates: Partial<Recibo>) {
@@ -210,8 +290,8 @@ export const useRecibosStore = defineStore('recibos', () => {
   }
 
   return {
-    recibos, history, loading,
-    fetchRecibos, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo, markAsPaid,
+    recibos, history, loading, loadingHistory,
+    fetchRecibos, fetchHistory, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo, markAsPaid, requestPayment,
     serviceLabels, serviceIcons, serviceColors,
   }
 })

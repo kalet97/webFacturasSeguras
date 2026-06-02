@@ -16,13 +16,11 @@ interface Option { id: number; nombre: string; color?: string | null }
 
 const empresas   = ref<Option[]>([])
 const tipos      = ref<Option[]>([])
-const estados    = ref<Option[]>([])
 const loadingCatalogos = ref(true)
 
 const form = ref({
   idEmpresaServicio: '',
   idTipoFactura:     '',
-  idEstadoRecibo:    '',
   codigoRecibo:      '',
   nombre:            '',
   precio:            '',
@@ -32,19 +30,25 @@ const form = ref({
   observacion:       '',
 })
 
-const loading = ref(false)
-const error   = ref('')
+const loading       = ref(false)
+const error         = ref('')
+const precioDisplay = ref('')
+
+function onPrecioInput(e: Event) {
+  const digits = (e.target as HTMLInputElement).value.replace(/\D/g, '')
+  form.value.precio  = digits
+  precioDisplay.value = digits ? Number(digits).toLocaleString('es-CO') : ''
+  ;(e.target as HTMLInputElement).value = precioDisplay.value
+}
 
 onMounted(async () => {
   try {
-    const [e, t, s] = await Promise.all([
+    const [e, t] = await Promise.all([
       api.get<{ idEmpresaServicio: number; nombre: string; color: string | null }[]>('/empresas-servicios', auth.token),
       api.get<{ idTipoFactura: number; nombre: string; color: string | null }[]>('/tipo-facturas', auth.token),
-      api.get<{ idEstadoRecibo: number; nombre: string; color: string | null }[]>('/estado-recibos', auth.token),
     ])
     empresas.value = e.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color }))
     tipos.value    = t.map(x => ({ id: x.idTipoFactura,     nombre: x.nombre, color: x.color }))
-    estados.value  = s.map(x => ({ id: x.idEstadoRecibo,    nombre: x.nombre, color: x.color }))
   } finally {
     loadingCatalogos.value = false
   }
@@ -52,8 +56,8 @@ onMounted(async () => {
 
 async function handleSave() {
   if (!form.value.idEmpresaServicio || !form.value.idTipoFactura ||
-      !form.value.idEstadoRecibo    || !form.value.codigoRecibo  ||
-      !form.value.nombre            || !form.value.fechaMaxima) {
+      !form.value.codigoRecibo      || !form.value.nombre        ||
+      !form.value.precio            || !form.value.fechaMaxima) {
     error.value = 'Completa los campos obligatorios'
     return
   }
@@ -63,10 +67,10 @@ async function handleSave() {
     await store.createRecibo({
       idEmpresaServicio: Number(form.value.idEmpresaServicio),
       idTipoFactura:     Number(form.value.idTipoFactura),
-      idEstadoRecibo:    Number(form.value.idEstadoRecibo),
+      idEstadoRecibo:    1,
       codigoRecibo:      form.value.codigoRecibo,
       nombre:            form.value.nombre,
-      precio:            form.value.precio ? Number(form.value.precio) : null,
+      precio:            Number(form.value.precio),
       fechaOportuna:     form.value.fechaOportuna  || null,
       fechaMaxima:       form.value.fechaMaxima     || null,
       fechaSuspencion:   form.value.fechaSuspencion || null,
@@ -121,18 +125,6 @@ async function handleSave() {
             </div>
           </div>
 
-          <!-- Estado -->
-          <div>
-            <label class="label">Estado <span class="text-danger">*</span></label>
-            <div class="relative">
-              <ChevronDown class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <select v-model="form.idEstadoRecibo" class="input-field appearance-none pr-10">
-                <option value="" disabled>Selecciona el estado</option>
-                <option v-for="s in estados" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-              </select>
-            </div>
-          </div>
-
           <div class="h-px bg-slate-100" />
 
           <!-- Código / número de cuenta -->
@@ -165,16 +157,16 @@ async function handleSave() {
 
           <!-- Valor -->
           <div>
-            <label class="label">Valor <span class="text-slate-400 text-xs font-normal">(opcional)</span></label>
+            <label class="label">Valor <span class="text-danger">*</span></label>
             <div class="relative">
               <DollarSign class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
-                v-model="form.precio"
-                type="number"
-                placeholder="185000"
-                class="input-field pl-11"
+                :value="precioDisplay"
+                type="text"
                 inputmode="numeric"
-                min="0"
+                placeholder="185.000"
+                class="input-field pl-11"
+                @input="onPrecioInput"
               />
             </div>
           </div>

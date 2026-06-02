@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Phone, MessageSquare, CreditCard, MapPin } from 'lucide-vue-next'
 import { useRecibosStore, type HistoryItem } from '@/stores/recibos'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 
 const store = useRecibosStore()
+
+onMounted(() => store.fetchHistory())
 
 type TabKey = 'all' | 'call' | 'reminder' | 'payment' | 'visit'
 
@@ -71,13 +73,17 @@ function formatCurrency(v: number) {
     </div>
 
     <div class="flex-1 overflow-y-auto px-4 pb-4">
-      <div v-if="filtered.length === 0" class="card mt-4 text-center py-12">
+      <div v-if="store.loadingHistory" class="flex justify-center mt-12">
+        <div class="w-7 h-7 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+      </div>
+
+      <div v-else-if="filtered.length === 0" class="card mt-4 text-center py-12">
         <p class="text-3xl mb-3">📋</p>
         <p class="font-semibold text-slate-700">Sin registros</p>
         <p class="text-sm text-slate-500 mt-1">No hay actividad en esta categoría</p>
       </div>
 
-      <div class="space-y-3 mt-1">
+      <div v-if="!store.loadingHistory" class="space-y-3 mt-1">
         <div
           v-for="item in filtered"
           :key="item.id"

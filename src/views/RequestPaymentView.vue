@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Upload, CheckCircle, Info } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
+import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
@@ -10,16 +12,32 @@ import ConfirmationModal from '@/components/ConfirmationModal.vue'
 const route = useRoute()
 const router = useRouter()
 const store = useRecibosStore()
+const auth = useAuthStore()
 
 const id = route.params.id as string
 const recibo = computed(() => store.getReciboById(id))
+
+const nequiNumber = ref<string | null>(null)
+
+onMounted(async () => {
+  try {
+    const params = await api.get<{ nombre: string; valor: string }[]>(
+      '/parametros-generales?nombre=nequi',
+      auth.token,
+    )
+    nequiNumber.value = params[0]?.valor ?? null
+  } catch {
+    // si falla, no se muestra el número
+  }
+})
 
 const COMMISSION_RATE = 0.05
 const commission = computed(() => Math.ceil((recibo.value?.amount ?? 0) * COMMISSION_RATE / 100) * 100)
 const total = computed(() => (recibo.value?.amount ?? 0) + commission.value)
 
 const fileRef = ref<HTMLInputElement | null>(null)
-const uploadedFile = ref<string | null>(null)
+const uploadedFile = ref<File | null>(null)
+const uploadedFileName = ref<string | null>(null)
 const showConfirm = ref(false)
 const loading = ref(false)
 const submitted = ref(false)
@@ -30,16 +48,22 @@ function formatCurrency(v: number) {
 
 function handleFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
-  if (file) uploadedFile.value = file.name
+  if (file) {
+    uploadedFile.value = file
+    uploadedFileName.value = file.name
+  }
 }
 
 async function confirmPayment() {
+  if (!uploadedFile.value) return
   loading.value = true
-  await new Promise(r => setTimeout(r, 1500))
-  store.updateRecibo(id, { status: 'paid' })
-  loading.value = false
-  showConfirm.value = false
-  submitted.value = true
+  try {
+    await store.requestPayment(id, recibo.value?.amount ?? 0, commission.value, uploadedFile.value)
+    showConfirm.value = false
+    submitted.value = true
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -114,7 +138,8 @@ async function confirmPayment() {
         </div>
         <div class="bg-primary-50 rounded-2xl p-3 text-center">
           <p class="text-xs text-slate-500">Número Nequi</p>
-          <p class="font-bold text-primary-600 text-lg mt-0.5">300 123 4567</p>
+          <p v-if="nequiNumber" class="font-bold text-primary-600 text-lg mt-0.5">{{ nequiNumber }}</p>
+          <p v-else class="text-sm text-slate-400 mt-0.5">Cargando...</p>
         </div>
       </div>
 
@@ -128,24 +153,24 @@ async function confirmPayment() {
           @click="fileRef?.click()"
           :class="[
             'w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 transition-colors',
-            uploadedFile
+            uploadedFileName
               ? 'border-success bg-success-50'
               : 'border-slate-200 bg-slate-50 hover:border-primary-300 hover:bg-primary-50',
           ]"
         >
-          <CheckCircle v-if="uploadedFile" class="w-8 h-8 text-success" />
+          <CheckCircle v-if="uploadedFileName" class="w-8 h-8 text-success" />
           <Upload v-else class="w-8 h-8 text-slate-400" />
-          <p :class="['text-sm font-medium', uploadedFile ? 'text-success' : 'text-slate-500']">
-            {{ uploadedFile || 'Toca para subir imagen' }}
+          <p :class="['text-sm font-medium', uploadedFileName ? 'text-success' : 'text-slate-500']">
+            {{ uploadedFileName || 'Toca para subir imagen' }}
           </p>
-          <p v-if="!uploadedFile" class="text-xs text-slate-400">JPG, PNG hasta 10MB</p>
+          <p v-if="!uploadedFileName" class="text-xs text-slate-400">JPG, PNG hasta 10MB</p>
         </button>
       </div>
 
-      <AppButton @click="showConfirm = true" :disabled="!uploadedFile">
+      <AppButton @click="showConfirm = true" :disabled="!uploadedFileName">
         Confirmar solicitud de pago
       </AppButton>
-      <p v-if="!uploadedFile" class="text-xs text-slate-400 text-center mt-2">Sube el comprobante para continuar</p>
+      <p v-if="!uploadedFileName" class="text-xs text-slate-400 text-center mt-2">Sube el comprobante para continuar</p>
     </div>
 
     <div v-else class="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">

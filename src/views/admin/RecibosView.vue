@@ -3,7 +3,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import {
   Search, FileText, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
-  Building2, Calendar, Hash, MessageCircle, CheckCircle,
+  Building2, Calendar, Hash, MessageCircle, CheckCircle, Bell,
+  Banknote, ImageOff, ArrowLeftRight,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -11,7 +12,7 @@ import { useAdminAuthStore } from '@/stores/adminAuth'
 const adminAuth = useAdminAuthStore()
 
 // --- Tipos ---
-interface Empresa { idEmpresaServicio: number; nombre: string; color: string | null }
+interface Empresa { idEmpresaServicio: number; nombre: string; color: string | null; link: string | null }
 interface Tipo    { idTipoFactura: number; nombre: string }
 interface Estado  { idEstadoRecibo: number; nombre: string; color: string | null }
 interface Cliente {
@@ -34,6 +35,26 @@ interface Paginator {
   data: Recibo[]; current_page: number; last_page: number; total: number; per_page: number
 }
 
+interface TipoNotificacion {
+  idTipoNotificacion: number
+  nombre: string
+  precio: number | null
+  color: string | null
+  requiereCobro: number
+}
+
+interface HistorialPagoRecibo {
+  idHistorialPagoRecibo: number
+  idRecibo: number
+  idUsuario: number | null
+  valorRecibo: number
+  comision: number | null
+  valorTotal: number
+  pagado: number
+  fechaSolicitud: string | null
+  urlComprobante: string | null
+}
+
 // --- Estado lista ---
 const recibos      = ref<Recibo[]>([])
 const loading      = ref(false)
@@ -43,6 +64,7 @@ const estadoFiltro = ref('')
 const currentPage  = ref(1)
 const lastPage     = ref(1)
 const total        = ref(0)
+const perPage      = ref(20)
 const estados      = ref<Estado[]>([])
 
 // --- Panel detalle ---
@@ -78,7 +100,7 @@ async function markAsPagado() {
   confirmLoading.value = true
   confirmError.value   = ''
   try {
-    await api.put(`/recibos/${confirmRecibo.value.idRecibo}`, { idEstadoRecibo: 2 }, adminAuth.token)
+    await api.put(`/recibos/${confirmRecibo.value.idRecibo}`, { idEstadoRecibo: 2, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token)
     const estadoPagado = estados.value.find(e => e.idEstadoRecibo === 2) ?? { idEstadoRecibo: 2, nombre: 'Pagado', color: null }
     const idx = recibos.value.findIndex(r => r.idRecibo === confirmRecibo.value!.idRecibo)
     if (idx !== -1) recibos.value[idx] = { ...recibos.value[idx], estado_recibo: estadoPagado }
@@ -90,6 +112,185 @@ async function markAsPagado() {
     confirmError.value = e instanceof Error ? e.message : 'Error al actualizar el recibo'
   } finally {
     confirmLoading.value = false
+  }
+}
+
+// --- Modal cambio de estado ---
+const estadoRecibo      = ref<Recibo | null>(null)
+const showEstadoModal   = ref(false)
+const estadoSelected    = ref<number | null>(null)
+const estadoLoading     = ref(false)
+const estadoError       = ref('')
+
+function openEstadoModal(r: Recibo) {
+  estadoRecibo.value   = r
+  estadoSelected.value = r.estado_recibo?.idEstadoRecibo ?? null
+  estadoError.value    = ''
+  showEstadoModal.value = true
+}
+
+function closeEstadoModal() {
+  showEstadoModal.value = false
+  estadoRecibo.value    = null
+  estadoError.value     = ''
+}
+
+async function cambiarEstado() {
+  if (!estadoRecibo.value || estadoSelected.value === null) return
+  estadoLoading.value = true
+  estadoError.value   = ''
+  try {
+    await api.put(`/recibos/${estadoRecibo.value.idRecibo}`, { idEstadoRecibo: estadoSelected.value, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token)
+    const nuevoEstado = estados.value.find(e => e.idEstadoRecibo === estadoSelected.value) ?? null
+    const idx = recibos.value.findIndex(r => r.idRecibo === estadoRecibo.value!.idRecibo)
+    if (idx !== -1) recibos.value[idx] = { ...recibos.value[idx], estado_recibo: nuevoEstado }
+    if (selected.value?.idRecibo === estadoRecibo.value.idRecibo) {
+      selected.value = { ...selected.value, estado_recibo: nuevoEstado }
+    }
+    closeEstadoModal()
+  } catch (e: unknown) {
+    estadoError.value = e instanceof Error ? e.message : 'Error al cambiar el estado'
+  } finally {
+    estadoLoading.value = false
+  }
+}
+
+// --- Modal pago por encargo (estado 4) ---
+const pagoEncargo       = ref<Recibo | null>(null)
+const showPagoModal     = ref(false)
+const pagoLoading       = ref(false)
+const pagoError         = ref('')
+const historialPago     = ref<HistorialPagoRecibo | null>(null)
+const historialLoading  = ref(false)
+
+async function openPagoModal(r: Recibo) {
+  pagoEncargo.value  = r
+  pagoError.value    = ''
+  historialPago.value = null
+  showPagoModal.value = true
+  historialLoading.value = true
+  try {
+    const data = await api.get<HistorialPagoRecibo[]>(
+      `/historial-pago-recibos?idRecibo=${r.idRecibo}`,
+      adminAuth.token,
+    )
+    historialPago.value = data.find(h => h.pagado === 0) ?? data[0] ?? null
+  } catch {
+    pagoError.value = 'No se pudo cargar el comprobante'
+  } finally {
+    historialLoading.value = false
+  }
+}
+
+function closePagoModal() {
+  showPagoModal.value  = false
+  pagoEncargo.value    = null
+  historialPago.value  = null
+  pagoError.value      = ''
+  codigoCopied.value   = false
+}
+
+const codigoCopied = ref(false)
+
+function copiarCodigo() {
+  const codigo = pagoEncargo.value?.codigoRecibo
+  if (!codigo) return
+  navigator.clipboard.writeText(codigo).then(() => {
+    codigoCopied.value = true
+    setTimeout(() => { codigoCopied.value = false }, 2500)
+  })
+}
+
+async function confirmarPagoEncargo() {
+  if (!pagoEncargo.value) return
+  pagoLoading.value = true
+  pagoError.value   = ''
+  try {
+    const estadoPagado = estados.value.find(e => e.idEstadoRecibo === 2) ?? { idEstadoRecibo: 2, nombre: 'Pagado', color: null }
+    await Promise.all([
+      api.put(`/recibos/${pagoEncargo.value.idRecibo}`, { idEstadoRecibo: 2, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token),
+      historialPago.value
+        ? api.put(
+            `/historial-pago-recibos/${historialPago.value.idHistorialPagoRecibo}`,
+            { pagado: 1, idUsuario: adminAuth.user?.idUsuario, fechaPago: new Date().toISOString() },
+            adminAuth.token,
+          )
+        : Promise.resolve(),
+    ])
+    const idx = recibos.value.findIndex(r => r.idRecibo === pagoEncargo.value!.idRecibo)
+    if (idx !== -1) recibos.value[idx] = { ...recibos.value[idx], estado_recibo: estadoPagado }
+    if (selected.value?.idRecibo === pagoEncargo.value.idRecibo) {
+      selected.value = { ...selected.value, estado_recibo: estadoPagado }
+    }
+    closePagoModal()
+  } catch (e: unknown) {
+    pagoError.value = e instanceof Error ? e.message : 'Error al confirmar el pago'
+  } finally {
+    pagoLoading.value = false
+  }
+}
+
+// --- Tipos de notificación ---
+const tiposNotificacion = ref<TipoNotificacion[]>([])
+
+async function fetchTiposNotificacion() {
+  try { tiposNotificacion.value = await api.get<TipoNotificacion[]>('/tipo-notificaciones', adminAuth.token) } catch {}
+}
+
+// --- Modal cobro notificación ---
+const notifRecibo      = ref<Recibo | null>(null)
+const showNotifModal   = ref(false)
+const notifLoading     = ref(false)
+const notifError       = ref('')
+const selectedTipo     = ref<TipoNotificacion | null>(null)
+const notifObservacion = ref('')
+
+function openNotifModal(r: Recibo) {
+  notifRecibo.value      = r
+  selectedTipo.value     = null
+  notifObservacion.value = ''
+  notifError.value       = ''
+  showNotifModal.value   = true
+}
+
+function closeNotifModal() {
+  showNotifModal.value = false
+  notifRecibo.value    = null
+  notifError.value     = ''
+}
+
+async function registrarNotificacion() {
+  if (!notifRecibo.value || !selectedTipo.value || !adminAuth.user) return
+  notifLoading.value = true
+  notifError.value   = ''
+  try {
+    const notif = await api.post<{ idHistorialNotificacion: number }>(
+      '/historial-notificaciones',
+      {
+        idCliente:          notifRecibo.value.cliente!.idCliente,
+        idUsuario:          adminAuth.user.idUsuario,
+        idRecibo:           notifRecibo.value.idRecibo,
+        idTipoNotificacion: selectedTipo.value.idTipoNotificacion,
+        observacion:        notifObservacion.value.trim() || null,
+      },
+      adminAuth.token,
+    )
+    if (selectedTipo.value.requiereCobro) {
+      await api.post(
+        '/historial-pago-notificaciones',
+        {
+          idCliente:               notifRecibo.value.cliente!.idCliente,
+          idHistorialNotificacion: notif.idHistorialNotificacion,
+          precio:                  selectedTipo.value.precio,
+        },
+        adminAuth.token,
+      )
+    }
+    closeNotifModal()
+  } catch (e: unknown) {
+    notifError.value = e instanceof Error ? e.message : 'Error al registrar la notificación'
+  } finally {
+    notifLoading.value = false
   }
 }
 
@@ -106,9 +307,10 @@ async function fetchRecibos() {
     if (search.value.trim()) params.set('search', search.value.trim())
     if (estadoFiltro.value)  params.set('estado', estadoFiltro.value)
     const data = await api.get<Paginator>(`/recibos?${params}`, adminAuth.token)
-    recibos.value = data.data
+    recibos.value  = data.data
     lastPage.value = data.last_page
     total.value    = data.total
+    perPage.value  = data.per_page
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Error al cargar los recibos'
   } finally {
@@ -116,7 +318,7 @@ async function fetchRecibos() {
   }
 }
 
-onMounted(() => { fetchEstados(); fetchRecibos() })
+onMounted(() => { fetchEstados(); fetchTiposNotificacion(); fetchRecibos() })
 watch([search, estadoFiltro], () => { currentPage.value = 1; fetchRecibos() })
 watch(currentPage, fetchRecibos)
 
@@ -140,7 +342,12 @@ function daysLeft(fecha: string | null) {
   return Math.ceil((new Date(fecha).getTime() - Date.now()) / 86_400_000)
 }
 
+function isPagoEncargo(r: Recibo) {
+  return r.estado_recibo?.idEstadoRecibo === 4
+}
+
 function statusClass(r: Recibo) {
+  if (isPagoEncargo(r)) return 'bg-orange-100 text-orange-700 ring-2 ring-orange-400 ring-offset-1 font-semibold'
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return 'bg-success-50 text-success-600'
   const days = daysLeft(r.fechaMaxima)
@@ -151,6 +358,7 @@ function statusClass(r: Recibo) {
 }
 
 function statusLabel(r: Recibo) {
+  if (isPagoEncargo(r)) return '💰 ' + (r.estado_recibo?.nombre ?? 'Pago por encargo')
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return r.estado_recibo?.nombre ?? 'Pagado'
   const days = daysLeft(r.fechaMaxima)
@@ -168,7 +376,7 @@ const pages = computed(() => {
 </script>
 
 <template>
-  <div class="p-6 lg:p-8 max-w-7xl mx-auto">
+  <div class="p-6 lg:p-8 mx-4">
 
     <!-- Encabezado -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -244,7 +452,12 @@ const pages = computed(() => {
               <tr
                 v-for="recibo in recibos"
                 :key="recibo.idRecibo"
-                class="hover:bg-slate-50 transition-colors"
+                :class="[
+                  'transition-colors',
+                  isPagoEncargo(recibo)
+                    ? 'bg-orange-50 hover:bg-orange-100 border-l-4 border-orange-400'
+                    : 'hover:bg-slate-50',
+                ]"
               >
                 <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ recibo.idRecibo }}</td>
 
@@ -309,12 +522,35 @@ const pages = computed(() => {
                 <td class="px-5 py-3.5 text-right">
                   <div class="flex items-center justify-end gap-1">
                     <button
+                      v-if="isPagoEncargo(recibo)"
+                      @click="openPagoModal(recibo)"
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition shadow-sm animate-pulse hover:animate-none"
+                      title="Ver comprobante y confirmar pago"
+                    >
+                      <Banknote class="w-3.5 h-3.5" /> Pagar
+                    </button>
+                    <button
                       v-if="recibo.estado_recibo?.idEstadoRecibo === 1"
                       @click="openConfirmPago(recibo)"
                       class="text-slate-400 hover:text-success-600 transition p-1.5 rounded-lg hover:bg-success-50"
                       title="Marcar como pagado"
                     >
                       <CheckCircle class="w-4 h-4" />
+                    </button>
+                    <button
+                      v-if="recibo.cliente"
+                      @click="openNotifModal(recibo)"
+                      class="text-slate-400 hover:text-warning-600 transition p-1.5 rounded-lg hover:bg-warning-50"
+                      title="Registrar notificación"
+                    >
+                      <Bell class="w-4 h-4" />
+                    </button>
+                    <button
+                      @click="openEstadoModal(recibo)"
+                      class="text-slate-400 hover:text-violet-600 transition p-1.5 rounded-lg hover:bg-violet-50"
+                      title="Cambiar estado"
+                    >
+                      <ArrowLeftRight class="w-4 h-4" />
                     </button>
                     <button
                       @click="openDetail(recibo)"
@@ -331,8 +567,10 @@ const pages = computed(() => {
         </div>
 
         <!-- Paginación -->
-        <div v-if="lastPage > 1" class="flex items-center justify-between px-5 py-3.5 border-t border-slate-100">
-          <p class="text-xs text-slate-500">Página {{ currentPage }} de {{ lastPage }}</p>
+        <div class="flex items-center justify-between px-5 py-3.5 border-t border-slate-100">
+          <p class="text-xs text-slate-500">
+            {{ total === 0 ? 'Sin resultados' : `Mostrando ${(currentPage - 1) * perPage + 1}–${Math.min(currentPage * perPage, total)} de ${total}` }}
+          </p>
           <div class="flex items-center gap-1">
             <button @click="currentPage--" :disabled="currentPage === 1" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition">
               <ChevronLeft class="w-4 h-4" />
@@ -349,6 +587,351 @@ const pages = computed(() => {
       </template>
     </div>
   </div>
+
+  <!-- ===================== Modal cambio de estado ===================== -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showEstadoModal && estadoRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeEstadoModal" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-5">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center">
+                <ArrowLeftRight class="w-4 h-4 text-violet-600" />
+              </div>
+              <div>
+                <p class="font-semibold text-slate-800 text-sm">Cambiar estado</p>
+                <p class="text-xs text-slate-400 truncate max-w-[180px]">{{ estadoRecibo.nombre }}</p>
+              </div>
+            </div>
+            <button @click="closeEstadoModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Lista de estados -->
+          <div class="flex flex-col gap-2">
+            <button
+              v-for="e in estados"
+              :key="e.idEstadoRecibo"
+              type="button"
+              @click="estadoSelected = e.idEstadoRecibo"
+              :class="[
+                'flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition',
+                estadoSelected === e.idEstadoRecibo
+                  ? 'border-violet-500 bg-violet-50'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+              ]"
+            >
+              <span
+                class="w-3 h-3 rounded-full shrink-0"
+                :style="{ backgroundColor: e.color ?? '#94a3b8' }"
+              />
+              <span class="text-sm font-medium text-slate-800 flex-1">{{ e.nombre }}</span>
+              <span
+                v-if="estadoRecibo.estado_recibo?.idEstadoRecibo === e.idEstadoRecibo"
+                class="text-xs text-slate-400 font-normal"
+              >actual</span>
+              <div
+                v-if="estadoSelected === e.idEstadoRecibo"
+                class="w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center shrink-0"
+              >
+                <svg class="w-2.5 h-2.5 fill-white" viewBox="0 0 10 10">
+                  <path d="M8.5 2.5L4 7.5 1.5 5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+            </button>
+          </div>
+
+          <div v-if="estadoError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+            <AlertCircle class="w-4 h-4 shrink-0" /> {{ estadoError }}
+          </div>
+
+          <!-- Footer -->
+          <div class="flex gap-3">
+            <button
+              @click="closeEstadoModal"
+              :disabled="estadoLoading"
+              class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="cambiarEstado"
+              :disabled="estadoLoading || estadoSelected === estadoRecibo.estado_recibo?.idEstadoRecibo"
+              class="flex-1 py-2.5 text-sm font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <svg v-if="estadoLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              {{ estadoLoading ? 'Guardando...' : 'Confirmar cambio' }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ===================== Modal pago por encargo ===================== -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showPagoModal && pagoEncargo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closePagoModal" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 bg-orange-100 rounded-xl flex items-center justify-center">
+                <Banknote class="w-4 h-4 text-orange-600" />
+              </div>
+              <div>
+                <p class="font-semibold text-slate-800 text-sm">Pago por encargo</p>
+                <p class="text-xs text-slate-400">
+                  {{ pagoEncargo.nombre }} &mdash; {{ pagoEncargo.cliente?.nombre }} {{ pagoEncargo.cliente?.apellido }}
+                </p>
+              </div>
+            </div>
+            <button @click="closePagoModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+            <!-- Comprobante -->
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Comprobante del cliente</p>
+              <div v-if="historialLoading" class="flex items-center justify-center h-48 bg-slate-50 rounded-2xl">
+                <div class="w-6 h-6 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+              </div>
+              <div v-else-if="historialPago?.urlComprobante" class="rounded-2xl overflow-hidden border border-slate-200">
+                <img
+                  :src="historialPago.urlComprobante"
+                  alt="Comprobante de pago"
+                  class="w-full object-contain max-h-72"
+                />
+              </div>
+              <div v-else class="flex flex-col items-center justify-center h-32 bg-slate-50 rounded-2xl gap-2 text-slate-400">
+                <ImageOff class="w-7 h-7 opacity-50" />
+                <p class="text-sm">Sin comprobante</p>
+              </div>
+            </div>
+
+            <!-- Resumen de montos -->
+            <div class="bg-orange-50 rounded-2xl divide-y divide-orange-100">
+              <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-sm text-slate-600">Valor del recibo</span>
+                <span class="font-semibold text-slate-800">{{ formatPrecio(pagoEncargo.precio) }}</span>
+              </div>
+              <template v-if="historialPago?.comision != null">
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-sm text-slate-600">Comisión (5%)</span>
+                  <span class="font-semibold text-slate-800">{{ formatPrecio(historialPago!.comision) }}</span>
+                </div>
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="font-bold text-slate-800">Total recibido</span>
+                  <span class="text-lg font-black text-orange-600">{{ formatPrecio(historialPago!.valorTotal) }}</span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Link de pago de la empresa -->
+            <div v-if="pagoEncargo.empresa_servicio?.link" class="flex flex-col gap-2">
+              <div v-if="pagoEncargo.codigoRecibo" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
+                <div>
+                  <p class="text-xs text-slate-400">Código a pegar en la plataforma</p>
+                  <p class="text-sm font-mono font-bold text-slate-800 mt-0.5">{{ pagoEncargo.codigoRecibo }}</p>
+                </div>
+                <Transition name="fade-quick">
+                  <span v-if="codigoCopied" class="text-xs font-medium text-success-600 shrink-0">¡Copiado!</span>
+                </Transition>
+              </div>
+              <a
+                :href="pagoEncargo.empresa_servicio.link"
+                target="_blank"
+                rel="noopener"
+                @click="copiarCodigo"
+                class="flex items-center justify-center gap-2 w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-xl transition"
+              >
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                {{ codigoCopied ? '¡Código copiado! Abriendo...' : `Ir a pagar en ${pagoEncargo.empresa_servicio.nombre}` }}
+              </a>
+            </div>
+
+            <!-- Info recibo -->
+            <div class="bg-slate-50 rounded-2xl divide-y divide-slate-100">
+              <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Empresa de servicio</span>
+                <span class="text-sm font-medium text-slate-700">{{ pagoEncargo.empresa_servicio?.nombre ?? '—' }}</span>
+              </div>
+              <div v-if="pagoEncargo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Código / N° cuenta</span>
+                <span class="text-sm font-mono text-slate-700">{{ pagoEncargo.codigoRecibo }}</span>
+              </div>
+              <div v-if="pagoEncargo.cliente" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Cliente</span>
+                <span class="text-sm text-slate-700">{{ clienteNombre(pagoEncargo) }}</span>
+              </div>
+              <div v-if="pagoEncargo.cliente" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Teléfono</span>
+                <a :href="`tel:${pagoEncargo.cliente.telefonoPrincipal}`" class="text-sm font-medium text-primary-600 hover:underline">
+                  {{ pagoEncargo.cliente.telefonoPrincipal }}
+                </a>
+              </div>
+            </div>
+
+            <div v-if="pagoError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> {{ pagoError }}
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div class="flex gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
+            <button
+              @click="closePagoModal"
+              :disabled="pagoLoading"
+              class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarPagoEncargo"
+              :disabled="pagoLoading || historialLoading"
+              class="flex-1 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <svg v-if="pagoLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <CheckCircle v-else class="w-4 h-4" />
+              {{ pagoLoading ? 'Procesando...' : 'Confirmar pago realizado' }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ===================== Modal cobro notificación ===================== -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showNotifModal && notifRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeNotifModal" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 bg-warning-50 rounded-xl flex items-center justify-center">
+                <Bell class="w-4 h-4 text-warning-600" />
+              </div>
+              <div>
+                <p class="font-semibold text-slate-800 text-sm">Registrar notificación</p>
+                <p class="text-xs text-slate-400">
+                  {{ notifRecibo.nombre }} &mdash; {{ notifRecibo.cliente?.nombre }} {{ notifRecibo.cliente?.apellido }}
+                </p>
+              </div>
+            </div>
+            <button @click="closeNotifModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Selecciona el tipo de notificación</p>
+
+            <div class="space-y-2">
+              <button
+                v-for="tipo in tiposNotificacion"
+                :key="tipo.idTipoNotificacion"
+                type="button"
+                @click="selectedTipo = tipo"
+                :class="[
+                  'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 text-left transition',
+                  selectedTipo?.idTipoNotificacion === tipo.idTipoNotificacion
+                    ? 'border-warning-500 bg-warning-50'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                ]"
+              >
+                <span
+                  class="w-3 h-3 rounded-full shrink-0"
+                  :style="{ backgroundColor: tipo.color ?? '#94a3b8' }"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-slate-800">{{ tipo.nombre }}</p>
+                  <p v-if="tipo.precio" class="text-xs text-warning-600 font-medium mt-0.5">
+                    {{ formatPrecio(tipo.precio) }}
+                  </p>
+                  <p v-else class="text-xs text-slate-400 mt-0.5">Sin costo</p>
+                </div>
+                <div
+                  v-if="selectedTipo?.idTipoNotificacion === tipo.idTipoNotificacion"
+                  class="w-5 h-5 rounded-full bg-warning-500 flex items-center justify-center shrink-0"
+                >
+                  <svg class="w-3 h-3 fill-white" viewBox="0 0 12 12">
+                    <path d="M10 3L5 8.5 2 5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  </svg>
+                </div>
+              </button>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Observación <span class="normal-case font-normal text-slate-400">(opcional)</span>
+              </label>
+              <textarea
+                v-model="notifObservacion"
+                rows="3"
+                placeholder="Ej: Cliente contestó, se comprometió a pagar esta semana..."
+                class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400
+                       focus:outline-none focus:ring-2 focus:ring-warning-500 focus:border-transparent transition resize-none"
+              />
+            </div>
+
+            <div v-if="notifError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> {{ notifError }}
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div class="flex gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
+            <button
+              @click="closeNotifModal"
+              :disabled="notifLoading"
+              class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="registrarNotificacion"
+              :disabled="!selectedTipo || notifLoading"
+              class="flex-1 py-2.5 text-sm font-medium text-white bg-warning-600 hover:bg-warning-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <svg v-if="notifLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              {{ notifLoading ? 'Registrando...' : 'Registrar notificación' }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <!-- ===================== Modal confirmar pago ===================== -->
   <Teleport to="body">
@@ -672,5 +1255,14 @@ const pages = computed(() => {
 }
 .drawer-enter-from .relative {
   transform: translateX(100%);
+}
+
+.fade-quick-enter-active,
+.fade-quick-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-quick-enter-from,
+.fade-quick-leave-to {
+  opacity: 0;
 }
 </style>
