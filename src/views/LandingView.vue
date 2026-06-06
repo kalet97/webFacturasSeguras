@@ -66,23 +66,42 @@ const plans = [
     price: '$7.900',
     highlight: false,
     features: [
-      'Hasta 12 facturas gestionadas',
-      'Notificaciones por WhatsApp ilimitadas',
-      '2 llamadas de cortesía al mes',
-      'Panel de seguimiento en app',
+      'Hasta 5 facturas gestionadas',
+      'Valor máximo por factura: $150.000',
+      'Recordatorios por WhatsApp',
+      '5 llamadas al mes',
+      'Recolección del dinero: $4.000 por visita',
+      'Excedente de valor: cargo del 4x1000',
     ],
   },
   {
-    name: 'Total',
+    name: 'Familiar',
     price: '$14.900',
     badge: 'Más popular',
     highlight: true,
     features: [
-      'Facturas ilimitadas',
+      'Hasta 10 facturas gestionadas',
+      'Valor máximo por factura: $200.000',
+      'Recordatorios por WhatsApp',
       'Llamadas ilimitadas',
-      '1 visita al mes si hay riesgo de corte',
-      'Pago por encargo sin comisión extra',
-      'Soporte prioritario',
+      'Prioridad en atención',
+      'Apoyo para programar pagos',
+      'Recolección del dinero: $4.000 por visita',
+      'Excedente de valor: cargo del 4x1000',
+    ],
+  },
+  {
+    name: 'Adulto Mayor',
+    price: '$24.900',
+    highlight: false,
+    features: [
+      'Seguimiento personalizado',
+      'Valor máximo por factura: $300.000',
+      'Contacto con familiar autorizado',
+      'Gestión especial de vencimientos críticos',
+      '1 visita presencial para recoger el dinero',
+      'Recolección adicional: $4.000 por visita extra',
+      'Excedente de valor: cargo del 4x1000',
     ],
   },
 ]
@@ -367,9 +386,9 @@ const mockRecibos = [
         <div class="text-center mb-14">
           <p class="text-primary-600 font-bold text-sm uppercase tracking-widest mb-2">Planes</p>
           <h2 class="text-3xl sm:text-4xl font-black text-gray-900">Sin letra pequeña</h2>
-          <p class="mt-3 text-gray-500 text-lg">Dos opciones claras. Sabes exactamente lo que pagas cada mes.</p>
+          <p class="mt-3 text-gray-500 text-lg">Tres planes claros. Sabes exactamente lo que pagas cada mes.</p>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           <div
             v-for="plan in plans"
             :key="plan.name"

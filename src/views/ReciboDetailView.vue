@@ -164,7 +164,7 @@ async function handleMarkPaid() {
               <Hash class="w-4 h-4 text-slate-500" />
             </div>
             <div>
-              <p class="text-xs text-slate-400">Número de cliente</p>
+              <p class="text-xs text-slate-400">Código de factura</p>
               <p class="text-sm font-medium text-slate-700">{{ recibo.clientNumber }}</p>
             </div>
           </div>

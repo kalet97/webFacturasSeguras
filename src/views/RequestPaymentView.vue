@@ -17,17 +17,19 @@ const auth = useAuthStore()
 const id = route.params.id as string
 const recibo = computed(() => store.getReciboById(id))
 
-const nequiNumber = ref<string | null>(null)
+const nequiNumber  = ref<string | null>(null)
+const nequiTitular = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    const params = await api.get<{ nombre: string; valor: string }[]>(
-      '/parametros-generales?nombre=nequi',
-      auth.token,
-    )
-    nequiNumber.value = params[0]?.valor ?? null
+    const [numParams, titularParams] = await Promise.all([
+      api.get<{ nombre: string; valor: string }[]>('/parametros-generales?nombre=nequi',         auth.token),
+      api.get<{ nombre: string; valor: string }[]>('/parametros-generales?nombre=nequi_titular', auth.token),
+    ])
+    nequiNumber.value  = numParams[0]?.valor  ?? null
+    nequiTitular.value = titularParams[0]?.valor ?? null
   } catch {
-    // si falla, no se muestra el número
+    // si falla, no se muestran los datos
   }
 })
 
@@ -140,6 +142,7 @@ async function confirmPayment() {
           <p class="text-xs text-slate-500">Número Nequi</p>
           <p v-if="nequiNumber" class="font-bold text-primary-600 text-lg mt-0.5">{{ nequiNumber }}</p>
           <p v-else class="text-sm text-slate-400 mt-0.5">Cargando...</p>
+          <p v-if="nequiTitular" class="text-xs text-slate-500 mt-1">{{ nequiTitular }}</p>
         </div>
       </div>
 
