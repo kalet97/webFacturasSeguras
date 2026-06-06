@@ -1,12 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, CreditCard, Mail, MapPin, Phone, Lock, Eye, EyeOff, ChevronLeft } from 'lucide-vue-next'
+import { User, CreditCard, Mail, MapPin, Phone, Lock, Eye, EyeOff, ChevronLeft, Check } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
 import AppButton from '@/components/AppButton.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+
+interface Plan { idPlan: number; nombre: string; precio: number; maxFacturas: number | null; maxPrecioPorFactura: number }
+
+const planes     = ref<Plan[]>([])
+const idPlan     = ref<number | null>(null)
+
+onMounted(async () => {
+  try {
+    planes.value = await api.get<Plan[]>('/planes')
+  } catch { /* silencioso */ }
+})
+
+function formatCOP(v: number) {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
+}
 
 const form = ref({
   nombre:             '',
@@ -39,6 +55,10 @@ async function handleRegister() {
     error.value = 'La contraseña debe tener mínimo 6 caracteres'
     return
   }
+  if (!idPlan.value) {
+    error.value = 'Debes seleccionar un plan para continuar'
+    return
+  }
 
   error.value = ''
   loading.value = true
@@ -53,6 +73,7 @@ async function handleRegister() {
       telefonoSecundario: form.value.telefonoSecundario ? Number(form.value.telefonoSecundario) : null,
       whatsapp:           form.value.whatsapp           ? Number(form.value.whatsapp)           : null,
       direccion:          form.value.direccion || undefined,
+      idPlan:             idPlan.value,
     })
     router.replace('/dashboard')
   } catch (e: unknown) {
@@ -216,6 +237,43 @@ async function handleRegister() {
               class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 p-0.5">
               <EyeOff v-if="showConfirm" class="w-5 h-5" />
               <Eye v-else class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div class="h-px bg-slate-100" />
+
+        <!-- Selección de plan -->
+        <div>
+          <label class="label">Elige tu plan <span class="text-danger">*</span></label>
+          <div class="flex flex-col gap-2 mt-1">
+            <button
+              v-for="plan in planes"
+              :key="plan.idPlan"
+              type="button"
+              @click="idPlan = plan.idPlan"
+              :class="[
+                'w-full text-left rounded-2xl border-2 px-4 py-3 transition-all',
+                idPlan === plan.idPlan
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-slate-200 bg-white hover:border-slate-300',
+              ]"
+            >
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-semibold text-sm text-slate-800">{{ plan.nombre }}</p>
+                  <p class="text-xs text-slate-500 mt-0.5">
+                    {{ plan.maxFacturas ? `Hasta ${plan.maxFacturas} facturas` : 'Facturas ilimitadas' }} ·
+                    Tope {{ formatCOP(plan.maxPrecioPorFactura) }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="font-bold text-primary-600 text-sm">{{ formatCOP(plan.precio) }}<span class="font-normal text-slate-400">/mes</span></span>
+                  <div :class="['w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors', idPlan === plan.idPlan ? 'border-primary-600 bg-primary-600' : 'border-slate-300']">
+                    <Check v-if="idPlan === plan.idPlan" class="w-3 h-3 text-white" />
+                  </div>
+                </div>
+              </div>
             </button>
           </div>
         </div>

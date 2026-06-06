@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, MapPin, Phone, Shield, LogOut, ChevronRight, LayoutDashboard } from 'lucide-vue-next'
+import { User, MapPin, Phone, Shield, LogOut, ChevronRight, LayoutDashboard, CreditCard } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
@@ -102,6 +102,29 @@ function getInitials(name?: string) {
             </div>
             <p class="text-sm text-slate-400">Agregar teléfono secundario</p>
           </button>
+        </div>
+      </div>
+
+      <!-- Mi plan -->
+      <div v-if="auth.user?.plan" class="card mb-4">
+        <h3 class="font-bold text-slate-800 mb-3">Mi plan</h3>
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-primary-50 rounded-xl flex items-center justify-center shrink-0">
+            <CreditCard class="w-5 h-5 text-primary-600" />
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <p class="font-semibold text-slate-800">{{ auth.user.plan.nombre }}</p>
+              <span class="text-xs font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">Activo</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              {{ auth.user.plan.maxFacturas ? `Hasta ${auth.user.plan.maxFacturas} facturas` : 'Facturas ilimitadas' }} ·
+              Tope ${{ auth.user.plan.maxPrecioPorFactura.toLocaleString('es-CO') }} por factura
+            </p>
+          </div>
+          <p class="font-bold text-slate-800 text-sm shrink-0">
+            ${{ auth.user.plan.precio.toLocaleString('es-CO') }}<span class="font-normal text-slate-400 text-xs">/mes</span>
+          </p>
         </div>
       </div>
 

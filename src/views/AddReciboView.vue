@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown } from 'lucide-vue-next'
+import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -36,6 +36,26 @@ const form = ref({
 const loading       = ref(false)
 const error         = ref('')
 const precioDisplay = ref('')
+
+const planLimiteAlcanzado = computed(() => {
+  const plan = auth.user?.plan
+  if (!plan || plan.maxFacturas === null) return false
+  return store.recibos.length >= plan.maxFacturas
+})
+
+const cargoAdicionalEstimado = computed(() => {
+  const plan = auth.user?.plan
+  if (!plan || !form.value.precio) return 0
+  const precio = Number(form.value.precio)
+  if (precio > plan.maxPrecioPorFactura) {
+    return Math.round((precio - plan.maxPrecioPorFactura) * 0.004)
+  }
+  return 0
+})
+
+function formatCOP(v: number) {
+  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
+}
 
 function onPrecioInput(e: Event) {
   const digits = (e.target as HTMLInputElement).value.replace(/\D/g, '')
@@ -105,6 +125,16 @@ async function handleSave() {
       </div>
 
       <template v-else>
+
+        <!-- Límite de facturas alcanzado -->
+        <div v-if="planLimiteAlcanzado" class="flex items-start gap-3 bg-danger-50 border border-danger-100 text-danger-600 rounded-2xl px-4 py-3 mb-4">
+          <AlertCircle class="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p class="font-semibold text-sm">Límite de tu plan alcanzado</p>
+            <p class="text-xs mt-0.5">Tu plan <strong>{{ auth.user?.plan?.nombre }}</strong> permite hasta {{ auth.user?.plan?.maxFacturas }} facturas. Cambia de plan para agregar más.</p>
+          </div>
+        </div>
+
         <p class="text-sm text-slate-500 mb-5 pt-1">Los campos marcados con <span class="text-danger">*</span> son obligatorios</p>
 
         <div class="flex flex-col gap-4">
@@ -165,6 +195,14 @@ async function handleSave() {
                 @input="onPrecioInput"
               />
             </div>
+            <!-- Aviso 4x1000 -->
+            <div v-if="cargoAdicionalEstimado > 0" class="flex items-start gap-2 mt-2 bg-warning-50 border border-warning-100 rounded-xl px-3 py-2.5">
+              <Info class="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
+              <p class="text-xs text-warning-600">
+                Este valor supera el límite de tu plan ({{ formatCOP(auth.user!.plan!.maxPrecioPorFactura) }}).
+                Se aplicará un cargo adicional de <strong>{{ formatCOP(cargoAdicionalEstimado) }}</strong> (4x1000 sobre el excedente).
+              </p>
+            </div>
           </div>
 
           <div class="h-px bg-slate-100" />
@@ -213,7 +251,7 @@ async function handleSave() {
             {{ error }}
           </div>
 
-          <AppButton :loading="loading" @click="handleSave" class="mt-2">
+          <AppButton :loading="loading" :disabled="planLimiteAlcanzado" @click="handleSave" class="mt-2">
             Guardar recibo
           </AppButton>
 

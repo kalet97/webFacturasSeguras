@@ -95,7 +95,7 @@ const plans = [
     price: '$24.900',
     highlight: false,
     features: [
-      'Seguimiento personalizado',
+      'Hasta 20 facturas gestionadas',
       'Valor máximo por factura: $300.000',
       'Contacto con familiar autorizado',
       'Gestión especial de vencimientos críticos',

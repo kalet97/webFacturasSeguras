@@ -5,10 +5,12 @@ import CrudModal from '@/components/admin/CrudModal.vue'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
 
+interface SuscripcionActiva { plan: { idPlan: number; nombre: string } | null }
 interface Cliente {
   idCliente: number; nombre: string; apellido: string; cedula: number
   correo: string; telefonoPrincipal: number; telefonoSecundario: number | null
   whatsapp: number | null; direccion: string | null; activo: number
+  suscripcion_activa: SuscripcionActiva | null
 }
 interface Paginator { data: Cliente[]; current_page: number; last_page: number; total: number }
 
@@ -158,13 +160,14 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                 <th class="text-left px-5 py-3.5">Cédula</th>
                 <th class="text-left px-5 py-3.5">Correo</th>
                 <th class="text-left px-5 py-3.5">Teléfono</th>
+                <th class="text-left px-5 py-3.5">Plan</th>
                 <th class="text-left px-5 py-3.5">Estado</th>
                 <th class="px-5 py-3.5"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr v-if="items.length === 0">
-                <td colspan="7" class="text-center py-12 text-slate-400 text-sm">Sin registros</td>
+                <td colspan="8" class="text-center py-12 text-slate-400 text-sm">Sin registros</td>
               </tr>
               <tr v-for="item in items" :key="item.idCliente" class="hover:bg-slate-50 transition-colors">
                 <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ item.idCliente }}</td>
@@ -172,6 +175,12 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                 <td class="px-5 py-3.5 text-slate-600 font-mono">{{ item.cedula }}</td>
                 <td class="px-5 py-3.5 text-slate-600 truncate max-w-[180px]">{{ item.correo }}</td>
                 <td class="px-5 py-3.5 text-slate-600">{{ item.telefonoPrincipal }}</td>
+                <td class="px-5 py-3.5">
+                  <span v-if="item.suscripcion_activa?.plan" class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
+                    {{ item.suscripcion_activa.plan.nombre }}
+                  </span>
+                  <span v-else class="text-xs text-slate-400">Sin plan</span>
+                </td>
                 <td class="px-5 py-3.5">
                   <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium', item.activo ? 'bg-success-50 text-success-600' : 'bg-slate-100 text-slate-500']">
                     {{ item.activo ? 'Activo' : 'Inactivo' }}

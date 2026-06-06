@@ -2,6 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 
+export interface PlanInfo {
+  idPlan: number
+  nombre: string
+  precio: number
+  maxFacturas: number | null
+  maxPrecioPorFactura: number
+}
+
 export interface User {
   idCliente: number
   nombre: string
@@ -12,6 +20,7 @@ export interface User {
   address: string    // direccion
   correo: string
   role: 'client' | 'admin'
+  plan: PlanInfo | null
 }
 
 interface ClienteResponse {
@@ -23,6 +32,7 @@ interface ClienteResponse {
   telefonoSecundario: number | null
   direccion: string | null
   activo: number
+  suscripcion_activa?: { plan: PlanInfo } | null
 }
 
 function mapCliente(c: ClienteResponse): User {
@@ -36,6 +46,7 @@ function mapCliente(c: ClienteResponse): User {
     address:            c.direccion ?? '',
     correo:             c.correo,
     role:               'client',
+    plan:               c.suscripcion_activa?.plan ?? null,
   }
 }
 
@@ -94,8 +105,11 @@ export const useAuthStore = defineStore('auth', () => {
     telefonoSecundario?: number | null
     whatsapp?: number | null
     direccion?: string
+    idPlan: number
   }): Promise<void> {
-    await api.post('/clientes', data)
+    const { idPlan, ...clienteData } = data
+    const cliente = await api.post<{ idCliente: number }>('/clientes', clienteData)
+    await api.post('/suscripciones', { idCliente: cliente.idCliente, idPlan })
     await login(String(data.cedula), data.clave)
   }
 
