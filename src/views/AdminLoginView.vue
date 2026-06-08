@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-vue-next'
 import { useAdminAuthStore } from '@/stores/adminAuth'
+import { version } from '../../package.json'
 
 const router = useRouter()
 const adminAuth = useAdminAuthStore()
@@ -52,7 +53,7 @@ async function handleLogin() {
         </p>
       </div>
 
-      <p class="text-primary-200 text-sm">© 2026 Recibo Seguro</p>
+      <p class="text-primary-200 text-sm">© 2026 Recibo Seguro · v{{ version }}</p>
     </div>
 
     <!-- Panel derecho — formulario -->
@@ -149,6 +150,7 @@ async function handleLogin() {
           <RouterLink to="/login" class="text-sm text-slate-500 hover:text-primary-600 transition">
             ← Volver al acceso de clientes
           </RouterLink>
+          <p class="text-xs text-slate-400 mt-3">v{{ version }}</p>
         </div>
 
       </div>

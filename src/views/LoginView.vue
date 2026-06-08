@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { CreditCard, Lock, Eye, EyeOff } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import AppButton from '@/components/AppButton.vue'
+import { version } from '../../package.json'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -107,9 +108,7 @@ async function handleLogin() {
         </p>
       </div>
 
-      <p class="text-center text-xs text-slate-400 mt-4">
-        Demo: cédula 1234567890 / contraseña 123456
-      </p>
+      <p class="text-center text-xs text-slate-400 mt-4">v{{ version }}</p>
     </div>
   </div>
 </template>
