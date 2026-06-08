@@ -123,14 +123,13 @@ const mockRecibos = [
       :class="scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-transparent'"
     >
       <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center shadow">
-            <span class="text-sm font-black text-white">RS</span>
-          </div>
-          <span
-            class="font-bold text-lg transition-colors duration-300"
-            :class="scrolled ? 'text-gray-900' : 'text-white'"
-          >Recibo Seguro</span>
+        <div class="flex items-center">
+          <img
+            src="@/assets/logo.svg"
+            alt="Recibos Seguro"
+            class="h-12 w-auto transition-all duration-300"
+            :style="scrolled ? {} : { filter: 'brightness(0) invert(1)' }"
+          />
         </div>
 
         <div class="flex items-center gap-2 sm:gap-4">
@@ -475,11 +474,13 @@ const mockRecibos = [
     <!-- ─── FOOTER ─── -->
     <footer class="bg-gray-900 py-10">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center">
-            <span class="text-xs font-black text-white">RS</span>
-          </div>
-          <span class="text-white font-bold">Recibo Seguro</span>
+        <div class="flex items-center">
+          <img
+            src="@/assets/logo.svg"
+            alt="Recibos Seguro"
+            class="h-10 w-auto"
+            style="filter: brightness(0) invert(1);"
+          />
         </div>
         <p class="text-gray-500 text-sm text-center">
           © 2026 Recibo Seguro · Colombia · Nunca más una factura vencida

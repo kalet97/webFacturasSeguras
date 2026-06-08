@@ -31,6 +31,7 @@ const daysColor: Record<string, string> = {
   pending:    'text-slate-500',
   paid:       'text-success',
   processing: 'text-violet-600',
+  reviewing:  'text-amber-600',
 }
 </script>
 
@@ -40,6 +41,7 @@ const daysColor: Record<string, string> = {
     :class="[
       'card w-full text-left hover:shadow-card-hover transition-shadow duration-200 active:scale-[0.99] overflow-hidden',
       props.recibo.status === 'processing' ? 'ring-2 ring-violet-300' : '',
+      props.recibo.status === 'reviewing'  ? 'ring-2 ring-amber-300'  : '',
     ]"
   >
     <div class="flex items-center gap-3">
@@ -60,6 +62,7 @@ const daysColor: Record<string, string> = {
           <p :class="['text-xs font-medium', daysColor[props.recibo.status]]">
             {{ props.recibo.status === 'paid'       ? 'Pagado ✓'
              : props.recibo.status === 'processing' ? 'Procesando pago...'
+             : props.recibo.status === 'reviewing'  ? 'En revisión...'
              : daysLabel(props.recibo.daysLeft) }}
           </p>
         </div>
@@ -75,6 +78,15 @@ const daysColor: Record<string, string> = {
     >
       <span class="w-2 h-2 rounded-full bg-violet-500 animate-pulse shrink-0" />
       <p class="text-xs text-violet-700 font-medium">Tu pago fue recibido · Estamos pagando tu factura</p>
+    </div>
+
+    <!-- Banner informativo para estado reviewing -->
+    <div
+      v-if="props.recibo.status === 'reviewing'"
+      class="mt-3 -mx-4 -mb-4 px-4 py-2.5 bg-amber-50 border-t border-amber-100 flex items-center gap-2"
+    >
+      <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+      <p class="text-xs text-amber-700 font-medium">Marcaste este recibo como pagado · Estamos verificando tu pago</p>
     </div>
   </button>
 </template>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Bell, TrendingDown } from 'lucide-vue-next'
+import { Plus, Bell, TrendingDown, X, Check, ArrowUp } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useRecibosStore } from '@/stores/recibos'
 import { api } from '@/services/api'
+import type { PlanInfo } from '@/stores/auth'
 import ReciboCard from '@/components/ReciboCard.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 
@@ -14,7 +15,28 @@ const router = useRouter()
 const auth = useAuthStore()
 const store = useRecibosStore()
 
-const deudaPendiente = ref(0)
+const deudaPendiente    = ref(0)
+const showLimitModal    = ref(false)
+const todosLosPlanes    = ref<PlanInfo[]>([])
+
+const planesUpgrade = computed(() => {
+  const idActual = auth.user?.plan?.idPlan ?? 0
+  return todosLosPlanes.value.filter(p => p.idPlan > idActual)
+})
+
+const planLimiteAlcanzado = computed(() => {
+  const plan = auth.user?.plan
+  if (!plan || plan.maxFacturas === null) return false
+  return store.recibos.length >= plan.maxFacturas
+})
+
+function handleAddRecibo() {
+  if (planLimiteAlcanzado.value) {
+    showLimitModal.value = true
+  } else {
+    router.push('/recibos/add')
+  }
+}
 
 async function fetchDeuda() {
   if (!auth.user) return
@@ -27,7 +49,13 @@ async function fetchDeuda() {
   } catch {}
 }
 
-onMounted(() => { store.fetchRecibos(); fetchDeuda() })
+async function fetchPlanes() {
+  try {
+    todosLosPlanes.value = await api.get<PlanInfo[]>('/planes', auth.token)
+  } catch {}
+}
+
+onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes() })
 
 const total = computed(() => store.recibos.length)
 const overdue = computed(() => store.recibos.filter(r => r.status === 'overdue').length)
@@ -52,7 +80,7 @@ function greeting() {
 }
 
 const sortedRecibos = computed(() => {
-  const order = { overdue: 0, soon: 1, processing: 2, pending: 3, paid: 4 }
+  const order = { overdue: 0, soon: 1, processing: 2, reviewing: 3, pending: 4, paid: 5 }
   return [...store.recibos].sort((a, b) => order[a.status] - order[b.status])
 })
 </script>
@@ -124,7 +152,7 @@ const sortedRecibos = computed(() => {
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-bold text-slate-800">Mis recibos</h3>
         <button
-          @click="router.push('/recibos/add')"
+          @click="handleAddRecibo"
           class="flex items-center gap-1.5 text-primary-600 text-sm font-medium"
         >
           <Plus class="w-4 h-4" />
@@ -158,5 +186,82 @@ const sortedRecibos = computed(() => {
     </div>
 
     <BottomTabBar />
+
+    <!-- Modal: límite de plan alcanzado -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="showLimitModal" class="fixed inset-0 z-[100] flex items-end justify-center">
+          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showLimitModal = false" />
+
+          <div class="relative w-full max-w-[390px] bg-white rounded-t-3xl shadow-2xl">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-4" />
+
+            <!-- Cabecera -->
+            <div class="flex items-start justify-between px-6 pt-5 pb-1">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-warning-50 rounded-2xl flex items-center justify-center shrink-0">
+                  <ArrowUp class="w-5 h-5 text-warning-600" />
+                </div>
+                <div>
+                  <h3 class="font-bold text-slate-800 text-base">Límite de plan alcanzado</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">
+                    Tu plan <strong class="text-slate-700">{{ auth.user?.plan?.nombre }}</strong>
+                    permite hasta {{ auth.user?.plan?.maxFacturas }} facturas
+                  </p>
+                </div>
+              </div>
+              <button @click="showLimitModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+
+            <p class="text-sm text-slate-500 px-6 pt-3 pb-4">
+              Para agregar más facturas, actualiza tu plan. Elige una de las siguientes opciones:
+            </p>
+
+            <!-- Planes de upgrade -->
+            <div class="px-6 pb-6 flex flex-col gap-3">
+              <button
+                v-for="plan in planesUpgrade"
+                :key="plan.idPlan"
+                class="w-full text-left rounded-2xl border-2 border-primary-200 bg-primary-50 px-4 py-3.5 hover:border-primary-400 hover:bg-primary-100 transition-all active:scale-[0.98]"
+                @click="showLimitModal = false"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-bold text-slate-800 text-sm">{{ plan.nombre }}</p>
+                    <ul class="mt-1.5 space-y-0.5">
+                      <li class="flex items-center gap-1.5 text-xs text-slate-600">
+                        <Check class="w-3 h-3 text-success shrink-0" />
+                        {{ plan.maxFacturas ? `Hasta ${plan.maxFacturas} facturas` : 'Facturas ilimitadas' }}
+                      </li>
+                      <li class="flex items-center gap-1.5 text-xs text-slate-600">
+                        <Check class="w-3 h-3 text-success shrink-0" />
+                        Tope ${{ plan.maxPrecioPorFactura.toLocaleString('es-CO') }} por factura
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="text-right shrink-0 ml-3">
+                    <p class="font-black text-primary-600 text-lg leading-none">${{ plan.precio.toLocaleString('es-CO') }}</p>
+                    <p class="text-xs text-slate-400 mt-0.5">/mes</p>
+                  </div>
+                </div>
+              </button>
+
+              <p class="text-center text-xs text-slate-400 pt-1">
+                Contacta a tu asesor o escríbenos por WhatsApp para cambiar de plan
+              </p>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
+.modal-enter-active .relative, .modal-leave-active .relative { transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-from .relative { transform: translateY(100%); }
+</style>

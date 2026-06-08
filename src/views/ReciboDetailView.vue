@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X, ArrowUpFromLine, Clock } from 'lucide-vue-next'
+import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X, ArrowUpFromLine, Clock, ZoomIn } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -27,6 +27,8 @@ interface Transaccion {
   fechaSolicitud: string | null
   fechaPago: string | null
   idUsuario: number | null
+  urlComprobante: string | null
+  urlComprobanteRecibo: string | null
 }
 
 const transacciones     = ref<Transaccion[]>([])
@@ -47,6 +49,10 @@ onMounted(async () => {
 const showPayModal  = ref(false)
 const markingPaid   = ref(false)
 const editingName   = ref(false)
+
+const lightboxSrc = ref<string | null>(null)
+function openLightbox(url: string) { lightboxSrc.value = url }
+function closeLightbox() { lightboxSrc.value = null }
 const nameInput     = ref('')
 const savingName    = ref(false)
 
@@ -249,12 +255,41 @@ async function handleMarkPaid() {
                   · Pagado: {{ formatDate(t.fechaPago) }}
                 </template>
               </p>
+
+              <!-- Soportes de pago -->
+              <div v-if="t.urlComprobante || t.urlComprobanteRecibo" class="flex gap-2.5 mt-3">
+                <!-- Comprobante del cliente (transferencia a Recibo Seguro) -->
+                <div v-if="t.urlComprobante" class="flex flex-col items-center gap-1">
+                  <button
+                    @click="openLightbox(t.urlComprobante)"
+                    class="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 active:scale-95 transition-transform"
+                  >
+                    <img :src="t.urlComprobante" alt="Comprobante" class="w-full h-full object-cover" />
+                    <div class="absolute inset-0 bg-black/0 active:bg-black/10 flex items-center justify-center">
+                      <ZoomIn class="w-4 h-4 text-white opacity-0 group-active:opacity-100 drop-shadow" />
+                    </div>
+                  </button>
+                  <span class="text-[10px] text-slate-400 leading-none">Tu pago</span>
+                </div>
+
+                <!-- Comprobante del admin (recibo de la empresa) -->
+                <div v-if="t.urlComprobanteRecibo" class="flex flex-col items-center gap-1">
+                  <button
+                    @click="openLightbox(t.urlComprobanteRecibo)"
+                    class="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-primary-200 active:scale-95 transition-transform"
+                  >
+                    <img :src="t.urlComprobanteRecibo" alt="Soporte de pago" class="w-full h-full object-cover" />
+                    <div class="absolute inset-0 bg-black/0 active:bg-black/10" />
+                  </button>
+                  <span class="text-[10px] text-primary-500 leading-none font-medium">Soporte</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="flex flex-col gap-3" v-if="recibo.status !== 'paid' && recibo.status !== 'processing'">
+      <div class="flex flex-col gap-3" v-if="recibo.status !== 'paid' && recibo.status !== 'processing' && recibo.status !== 'reviewing'">
         <AppButton @click="router.push(`/recibos/${id}/payment`)">
           <CreditCard class="w-5 h-5" />
           Solicitar pago por encargo
@@ -269,6 +304,12 @@ async function handleMarkPaid() {
         <p class="text-3xl mb-2">⏳</p>
         <p class="font-semibold text-violet-700">Pago en trámite</p>
         <p class="text-sm text-slate-500 mt-1">Recibimos tu pago y estamos pagando<br>la factura al servicio correspondiente</p>
+      </div>
+
+      <div v-else-if="recibo.status === 'reviewing'" class="card text-center py-6 border border-amber-100 bg-amber-50">
+        <p class="text-3xl mb-2">🔎</p>
+        <p class="font-semibold text-amber-700">Pago en revisión</p>
+        <p class="text-sm text-slate-500 mt-1">Marcaste este recibo como pagado.<br>Nuestro equipo está verificando el pago con el servicio</p>
       </div>
 
       <div v-else class="card text-center py-6">
@@ -292,4 +333,47 @@ async function handleMarkPaid() {
   <div v-else class="screen items-center justify-center">
     <p class="text-slate-400">Recibo no encontrado</p>
   </div>
+
+  <!-- Lightbox fullscreen -->
+  <Teleport to="body">
+    <Transition name="lightbox">
+      <div
+        v-if="lightboxSrc"
+        class="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center"
+        @click="closeLightbox"
+      >
+        <button
+          class="absolute top-4 right-4 z-10 w-10 h-10 bg-white/15 hover:bg-white/25 rounded-full flex items-center justify-center transition"
+          @click.stop="closeLightbox"
+        >
+          <X class="w-5 h-5 text-white" />
+        </button>
+        <img
+          :src="lightboxSrc"
+          class="max-w-full max-h-full object-contain p-4 select-none"
+          alt="Soporte de pago"
+          @click.stop
+        />
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 0.2s ease;
+}
+.lightbox-enter-active img,
+.lightbox-leave-active img {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
+}
+.lightbox-enter-from img {
+  transform: scale(0.92);
+  opacity: 0;
+}
+</style>

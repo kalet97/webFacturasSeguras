@@ -22,12 +22,12 @@ const nequiTitular = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    const [numParams, titularParams] = await Promise.all([
-      api.get<{ nombre: string; valor: string }[]>('/parametros-generales?nombre=nequi',         auth.token),
-      api.get<{ nombre: string; valor: string }[]>('/parametros-generales?nombre=nequi_titular', auth.token),
+    const [numParam, titularParam] = await Promise.all([
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/nequi',        auth.token),
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/nequiTitular', auth.token),
     ])
-    nequiNumber.value  = numParams[0]?.valor  ?? null
-    nequiTitular.value = titularParams[0]?.valor ?? null
+    nequiNumber.value  = numParam?.valor  ?? null
+    nequiTitular.value = titularParam?.valor ?? null
   } catch {
     // si falla, no se muestran los datos
   }

@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 478" role="img" aria-label="Recibos Seguro - Sistema de Pago de Servicios">
+  <defs>
+    <!-- Shield outer gradient (teal) -->
+    <linearGradient id="shieldOuter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3ECDD5"/>
+      <stop offset="100%" stop-color="#0A7D8C"/>
+    </linearGradient>
+    <!-- Shield inner gradient (slightly deeper teal) -->
+    <linearGradient id="shieldInner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#29B9C4"/>
+      <stop offset="100%" stop-color="#0E8C9A"/>
+    </linearGradient>
+    <!-- Water drop: blue -->
+    <linearGradient id="dropGrad" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#64C8F8"/>
+      <stop offset="100%" stop-color="#1565C0"/>
+    </linearGradient>
+    <!-- Flame: red → orange → amber -->
+    <linearGradient id="flameGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"   stop-color="#CC2000"/>
+      <stop offset="45%"  stop-color="#FF4500"/>
+      <stop offset="100%" stop-color="#FFA000"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══════════════════════════════
+       SHIELD
+       ═══════════════════════════════ -->
+
+  <!-- Outer shield body -->
+  <path d="
+    M 200,18
+    C 268,18 296,59 296,106
+    L 296,184
+    C 296,234 200,274 200,274
+    C 200,274 104,234 104,184
+    L 104,106
+    C 104,59 132,18 200,18 Z"
+    fill="url(#shieldOuter)"/>
+
+  <!-- Inner shield (inset ~15 px — creates the bevelled rim) -->
+  <path d="
+    M 200,36
+    C 256,36 281,72 281,114
+    L 281,182
+    C 281,224 200,260 200,260
+    C 200,260 119,224 119,182
+    L 119,114
+    C 119,72 144,36 200,36 Z"
+    fill="url(#shieldInner)"/>
+
+  <!-- White check-mark / swoosh
+       Short leg  : from outside-left up to the elbow
+       Long leg   : diagonal from elbow up-right, exiting the shield -->
+  <path d="M 100,224
+           C 120,232 144,246 168,250
+           C 202,220 248,174 298,120"
+        stroke="white" stroke-width="15" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ═══════════════════════════════
+       ICONS INSIDE SHIELD
+       ═══════════════════════════════ -->
+
+  <!-- Water drop (left, blue) — teardrop pointing upward -->
+  <path d="
+    M 154,80
+    C 154,80 128,120 128,140
+    C 128,156 140,168 154,168
+    C 168,168 180,156 180,140
+    C 180,120 154,80 154,80 Z"
+    fill="url(#dropGrad)"/>
+  <!-- Highlight on drop -->
+  <ellipse cx="145" cy="128" rx="5" ry="9"
+           fill="rgba(255,255,255,0.42)"
+           transform="rotate(-22 145 128)"/>
+
+  <!-- Flame (right, red-orange) -->
+  <path d="
+    M 246,168
+    C 232,162 216,148 222,126
+    C 224,134 230,130 232,126
+    C 228,108 236,94 246,86
+    C 240,108 252,116 256,112
+    C 258,106 264,106 266,110
+    C 256,126 250,142 260,154
+    C 262,160 264,166 262,170
+    C 256,160 252,165 246,168 Z"
+    fill="url(#flameGrad)"/>
+
+  <!-- Lightning bolt (center, yellow) -->
+  <!-- Classic 7-point zig-zag bolt -->
+  <polygon
+    points="212,108 196,150 210,150 192,190 228,146 212,146 228,108"
+    fill="#FFD600"/>
+
+  <!-- ═══════════════════════════════
+       TEXT
+       ═══════════════════════════════ -->
+
+  <!-- RECIBOS — dark navy -->
+  <text x="200" y="324"
+        text-anchor="middle"
+        font-family="'Arial Black', 'Arial Bold', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="900"
+        font-size="60"
+        fill="#162548"
+        letter-spacing="1">RECIBOS</text>
+
+  <!-- SEGURO — teal -->
+  <text x="200" y="392"
+        text-anchor="middle"
+        font-family="'Arial Black', 'Arial Bold', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="900"
+        font-size="60"
+        fill="#1A9AA5"
+        letter-spacing="1">SEGURO</text>
+
+  <!-- SISTEMA DE PAGO DE SERVICIOS — small gray subtitle -->
+  <text x="200" y="422"
+        text-anchor="middle"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-weight="600"
+        font-size="14"
+        fill="#555555"
+        letter-spacing="2.5">SISTEMA DE PAGO DE SERVICIOS</text>
+</svg>

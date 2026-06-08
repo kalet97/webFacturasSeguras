@@ -14,6 +14,12 @@ const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 
+function onCedulaInput(e: Event) {
+  const el = e.target as HTMLInputElement
+  cedula.value = el.value.replace(/\D/g, '')
+  el.value = cedula.value
+}
+
 async function handleLogin() {
   if (!cedula.value || !password.value) {
     error.value = 'Completa todos los campos'
@@ -35,10 +41,8 @@ async function handleLogin() {
 <template>
   <div class="screen">
     <div class="flex-1 flex flex-col px-6 pt-12 pb-8">
-      <div class="mb-10">
-        <div class="w-14 h-14 bg-primary-600 rounded-2xl flex items-center justify-center mb-4">
-          <span class="text-2xl font-black text-white">RS</span>
-        </div>
+      <div class="mb-10 flex flex-col items-center text-center">
+        <img src="@/assets/logo.svg" alt="Recibos Seguro" class="h-44 w-auto mb-2" />
         <h1 class="text-2xl font-bold text-slate-800">Bienvenido 👋</h1>
         <p class="text-slate-500 mt-1 text-sm">Inicia sesión para continuar</p>
       </div>
@@ -49,11 +53,13 @@ async function handleLogin() {
           <div class="relative">
             <CreditCard class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
-              v-model="cedula"
+              :value="cedula"
               type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
               placeholder="1234567890"
               class="input-field pl-11"
-              inputmode="numeric"
+              @input="onCedulaInput"
             />
           </div>
         </div>

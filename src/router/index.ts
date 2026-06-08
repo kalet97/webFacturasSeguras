@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAdminAuthStore } from '@/stores/adminAuth'
+import { useRecibosStore } from '@/stores/recibos'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,6 +34,7 @@ const router = createRouter({
       children: [
         { path: '',          redirect: '/admin/dashboard' },
         { path: 'dashboard', name: 'admin-dashboard', component: () => import('@/views/admin/DashboardView.vue'), meta: { title: 'Dashboard', admin: true, fullscreen: true } },
+        { path: 'notificaciones-admin', name: 'admin-notificaciones-admin', component: () => import('@/views/admin/NotificacionesAdminView.vue'), meta: { title: 'Notificaciones', admin: true, fullscreen: true } },
         { path: 'clientes',          name: 'admin-clientes',          component: () => import('@/views/admin/ClientesView.vue'),          meta: { title: 'Clientes',             admin: true, fullscreen: true } },
         { path: 'recibos',           name: 'admin-recibos',           component: () => import('@/views/admin/RecibosView.vue'),           meta: { title: 'Recibos',              admin: true, fullscreen: true } },
         { path: 'notificaciones',    name: 'admin-notificaciones',    component: () => import('@/views/admin/TiposNotificacionView.vue'), meta: { title: 'Tipos de Notificación', admin: true, fullscreen: true } },
@@ -42,13 +44,13 @@ const router = createRouter({
         { path: 'usuarios',          name: 'admin-usuarios',          component: () => import('@/views/admin/UsuariosView.vue'),          meta: { title: 'Usuarios',             admin: true, fullscreen: true } },
         { path: 'tipos-factura',     name: 'admin-tipos-factura',     component: () => import('@/views/admin/TiposFacturaView.vue'),      meta: { title: 'Tipos de Factura',     admin: true, fullscreen: true } },
         { path: 'estados-recibo',    name: 'admin-estados-recibo',    component: () => import('@/views/admin/EstadosReciboView.vue'),     meta: { title: 'Estados de Recibo',    admin: true, fullscreen: true } },
-        { path: 'configuracion',     name: 'admin-configuracion',     component: () => import('@/views/admin/DashboardView.vue'),         meta: { title: 'Configuración',        admin: true, fullscreen: true } },
+        { path: 'configuracion',     name: 'admin-configuracion',     component: () => import('@/views/admin/ConfiguracionView.vue'),    meta: { title: 'Configuración',        admin: true, fullscreen: true } },
       ],
     },
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const auth      = useAuthStore()
   const adminAuth = useAdminAuthStore()
 
@@ -59,6 +61,19 @@ router.beforeEach((to, _from, next) => {
 
   if (!to.meta.public && !auth.isAuthenticated) {
     return next('/login')
+  }
+
+  if (to.name === 'add-recibo' && auth.isAuthenticated) {
+    const plan = auth.user?.plan
+    if (plan?.maxFacturas != null) {
+      const recibosStore = useRecibosStore()
+      if (recibosStore.recibos.length === 0) {
+        await recibosStore.fetchRecibos().catch(() => {})
+      }
+      if (recibosStore.recibos.length >= plan.maxFacturas) {
+        return next('/dashboard')
+      }
+    }
   }
 
   next()

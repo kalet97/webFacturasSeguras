@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
-export type ReciboStatus = 'pending' | 'soon' | 'overdue' | 'paid' | 'processing'
+export type ReciboStatus = 'pending' | 'soon' | 'overdue' | 'paid' | 'processing' | 'reviewing'
 export type ServiceType = 'energia' | 'agua' | 'gas' | 'internet' | 'telefono' | 'tv'
 
 export interface Notification {
@@ -117,6 +117,7 @@ function parseDate(s: string) {
 
 function calcStatus(api: ApiRecibo): ReciboStatus {
   if (api.estado_recibo?.idEstadoRecibo === 4) return 'processing'
+  if (api.estado_recibo?.idEstadoRecibo === 5) return 'reviewing'
 
   const estadoNombre = (api.estado_recibo?.nombre ?? '').toLowerCase()
   if (PAID_NAMES.some(p => estadoNombre.includes(p))) return 'paid'
@@ -146,7 +147,7 @@ function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
     address: clienteAddress,
     amount: r.precio ?? undefined,
     status,
-    daysLeft: status === 'paid' ? 0 : calcDaysLeft(r.fechaMaxima),
+    daysLeft: status === 'paid' || status === 'reviewing' ? 0 : calcDaysLeft(r.fechaMaxima),
     notifications: [],
   }
 }
@@ -234,7 +235,7 @@ export const useRecibosStore = defineStore('recibos', () => {
     const auth  = useAuthStore()
     const valor = recibos.value.find(r => r.id === id)?.amount ?? 0
     await Promise.all([
-      api.put(`/recibos/${id}`, { idEstadoRecibo: 2 }, auth.token),
+      api.put(`/recibos/${id}`, { idEstadoRecibo: 5 }, auth.token),
       api.post('/historial-pago-recibos', {
         idRecibo:   Number(id),
         idUsuario:  null,
@@ -244,7 +245,7 @@ export const useRecibosStore = defineStore('recibos', () => {
         pagado:     1,
       }, auth.token),
     ])
-    updateRecibo(id, { status: 'paid', daysLeft: 0 })
+    updateRecibo(id, { status: 'reviewing', daysLeft: 0 })
   }
 
   async function requestPayment(id: string, valorRecibo: number, comision: number, file: File): Promise<void> {

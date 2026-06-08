@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info } from 'lucide-vue-next'
+import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info, CheckCircle } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -33,15 +33,10 @@ const form = ref({
   observacion:       '',
 })
 
-const loading       = ref(false)
-const error         = ref('')
-const precioDisplay = ref('')
-
-const planLimiteAlcanzado = computed(() => {
-  const plan = auth.user?.plan
-  if (!plan || plan.maxFacturas === null) return false
-  return store.recibos.length >= plan.maxFacturas
-})
+const loading        = ref(false)
+const error          = ref('')
+const precioDisplay  = ref('')
+const showSuccessModal = ref(false)
 
 const cargoAdicionalEstimado = computed(() => {
   const plan = auth.user?.plan
@@ -63,6 +58,20 @@ function onPrecioInput(e: Event) {
   precioDisplay.value = digits ? Number(digits).toLocaleString('es-CO') : ''
   ;(e.target as HTMLInputElement).value = precioDisplay.value
 }
+
+// Si la fecha oportuna cambia y la límite queda antes, la limpia
+watch(() => form.value.fechaOportuna, (nueva) => {
+  if (nueva && form.value.fechaMaxima && form.value.fechaMaxima < nueva) {
+    form.value.fechaMaxima = ''
+  }
+})
+
+// Si la fecha límite cambia y la suspensión queda antes, la limpia
+watch(() => form.value.fechaMaxima, (nueva) => {
+  if (nueva && form.value.fechaSuspencion && form.value.fechaSuspencion < nueva) {
+    form.value.fechaSuspencion = ''
+  }
+})
 
 onMounted(async () => {
   try {
@@ -104,7 +113,7 @@ async function handleSave() {
       fechaSuspencion:   form.value.fechaSuspencion || null,
       observacion:       form.value.observacion     || null,
     })
-    router.replace('/dashboard')
+    showSuccessModal.value = true
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Error al guardar el recibo'
   } finally {
@@ -125,15 +134,6 @@ async function handleSave() {
       </div>
 
       <template v-else>
-
-        <!-- Límite de facturas alcanzado -->
-        <div v-if="planLimiteAlcanzado" class="flex items-start gap-3 bg-danger-50 border border-danger-100 text-danger-600 rounded-2xl px-4 py-3 mb-4">
-          <AlertCircle class="w-5 h-5 shrink-0 mt-0.5" />
-          <div>
-            <p class="font-semibold text-sm">Límite de tu plan alcanzado</p>
-            <p class="text-xs mt-0.5">Tu plan <strong>{{ auth.user?.plan?.nombre }}</strong> permite hasta {{ auth.user?.plan?.maxFacturas }} facturas. Cambia de plan para agregar más.</p>
-          </div>
-        </div>
 
         <p class="text-sm text-slate-500 mb-5 pt-1">Los campos marcados con <span class="text-danger">*</span> son obligatorios</p>
 
@@ -221,7 +221,7 @@ async function handleSave() {
             <label class="label">Fecha límite de pago <span class="text-danger">*</span></label>
             <div class="relative">
               <Calendar class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input v-model="form.fechaMaxima" type="date" class="input-field pl-11" />
+              <input v-model="form.fechaMaxima" type="date" class="input-field pl-11" :min="form.fechaOportuna || undefined" />
             </div>
             <p class="text-xs text-slate-400 mt-1 ml-1">Última fecha antes de cobrar mora</p>
           </div>
@@ -231,7 +231,7 @@ async function handleSave() {
             <label class="label">Fecha de suspensión <span class="text-slate-400 text-xs font-normal">(opcional)</span></label>
             <div class="relative">
               <AlertCircle class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input v-model="form.fechaSuspencion" type="date" class="input-field pl-11" />
+              <input v-model="form.fechaSuspencion" type="date" class="input-field pl-11" :min="form.fechaMaxima || undefined" />
             </div>
           </div>
 
@@ -251,12 +251,46 @@ async function handleSave() {
             {{ error }}
           </div>
 
-          <AppButton :loading="loading" :disabled="planLimiteAlcanzado" @click="handleSave" class="mt-2">
+          <AppButton :loading="loading" @click="handleSave" class="mt-2">
             Guardar recibo
           </AppButton>
 
         </div>
       </template>
     </div>
+
+  <!-- Modal éxito -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showSuccessModal" class="fixed inset-0 z-[100] flex items-end justify-center">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+        <div class="relative w-full max-w-[390px] bg-white rounded-t-3xl p-6 shadow-2xl">
+          <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-6" />
+          <div class="flex flex-col items-center text-center gap-3 mb-6">
+            <div class="w-16 h-16 bg-success-50 rounded-3xl flex items-center justify-center">
+              <CheckCircle class="w-9 h-9 text-success" />
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-800">¡Recibo agregado!</h3>
+              <p class="text-sm text-slate-500 mt-1">
+                <strong class="text-slate-700">{{ form.nombre }}</strong> fue registrado correctamente.
+                Te avisaremos antes de que venza.
+              </p>
+            </div>
+          </div>
+          <AppButton @click="router.replace('/dashboard')">
+            Ir al inicio
+          </AppButton>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
+.modal-enter-active .relative, .modal-leave-active .relative { transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-from .relative { transform: translateY(100%); }
+</style>

@@ -34,6 +34,11 @@ const config: Record<ReciboStatus, { label: string; classes: string; dot: string
     classes: 'bg-violet-100 text-violet-700',
     dot: 'bg-violet-500 animate-pulse',
   },
+  reviewing: {
+    label: 'En revisión',
+    classes: 'bg-amber-100 text-amber-700',
+    dot: 'bg-amber-500 animate-pulse',
+  },
 }
 </script>
 

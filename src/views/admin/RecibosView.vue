@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   Search, FileText, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
   Building2, Calendar, Hash, MessageCircle, CheckCircle, Bell,
-  Banknote, ImageOff, ArrowLeftRight,
+  Banknote, ImageOff, ArrowLeftRight, ImagePlus,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -77,22 +77,43 @@ function openDetail(r: Recibo) {
 }
 function closePanel() { showPanel.value = false }
 
+// --- Helper: subir comprobante de pago ---
+async function uploadComprobante(file: File): Promise<string> {
+  const fd = new FormData()
+  fd.append('archivo', file)
+  const res = await api.upload<{ url: string }>('/upload/comprobante', fd, adminAuth.token)
+  return res.url
+}
+
 // --- Confirmación marcar como pagado ---
-const confirmRecibo  = ref<Recibo | null>(null)
-const showConfirm    = ref(false)
-const confirmLoading = ref(false)
-const confirmError   = ref('')
+const confirmRecibo   = ref<Recibo | null>(null)
+const showConfirm     = ref(false)
+const confirmLoading  = ref(false)
+const confirmError    = ref('')
+const confirmFile     = ref<File | null>(null)
+const confirmPreview  = ref('')
+
+function onConfirmFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  confirmFile.value    = file
+  confirmPreview.value = file ? URL.createObjectURL(file) : ''
+}
+function clearConfirmFile() { confirmFile.value = null; confirmPreview.value = '' }
 
 function openConfirmPago(r: Recibo) {
-  confirmRecibo.value = r
-  confirmError.value  = ''
-  showConfirm.value   = true
+  confirmRecibo.value  = r
+  confirmError.value   = ''
+  confirmFile.value    = null
+  confirmPreview.value = ''
+  showConfirm.value    = true
 }
 
 function closeConfirm() {
-  showConfirm.value   = false
-  confirmRecibo.value = null
-  confirmError.value  = ''
+  showConfirm.value    = false
+  confirmRecibo.value  = null
+  confirmError.value   = ''
+  confirmFile.value    = null
+  confirmPreview.value = ''
 }
 
 async function markAsPagado() {
@@ -100,7 +121,25 @@ async function markAsPagado() {
   confirmLoading.value = true
   confirmError.value   = ''
   try {
+    let urlComprobanteRecibo: string | null = null
+    if (confirmFile.value) {
+      urlComprobanteRecibo = await uploadComprobante(confirmFile.value)
+    }
+
     await api.put(`/recibos/${confirmRecibo.value.idRecibo}`, { idEstadoRecibo: 2, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token)
+
+    if (urlComprobanteRecibo) {
+      await api.post('/historial-pago-recibos', {
+        idRecibo:            confirmRecibo.value.idRecibo,
+        valorRecibo:         confirmRecibo.value.precio ?? 0,
+        comision:            0,
+        valorTotal:          confirmRecibo.value.precio ?? 0,
+        pagado:              1,
+        urlComprobanteRecibo,
+        idUsuario:           adminAuth.user?.idUsuario ?? null,
+      }, adminAuth.token)
+    }
+
     const estadoPagado = estados.value.find(e => e.idEstadoRecibo === 2) ?? { idEstadoRecibo: 2, nombre: 'Pagado', color: null }
     const idx = recibos.value.findIndex(r => r.idRecibo === confirmRecibo.value!.idRecibo)
     if (idx !== -1) recibos.value[idx] = { ...recibos.value[idx], estado_recibo: estadoPagado }
@@ -162,6 +201,15 @@ const pagoLoading       = ref(false)
 const pagoError         = ref('')
 const historialPago     = ref<HistorialPagoRecibo | null>(null)
 const historialLoading  = ref(false)
+const pagoFile          = ref<File | null>(null)
+const pagoPreview       = ref('')
+
+function onPagoFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  pagoFile.value    = file
+  pagoPreview.value = file ? URL.createObjectURL(file) : ''
+}
+function clearPagoFile() { pagoFile.value = null; pagoPreview.value = '' }
 
 async function openPagoModal(r: Recibo) {
   pagoEncargo.value  = r
@@ -188,6 +236,8 @@ function closePagoModal() {
   historialPago.value  = null
   pagoError.value      = ''
   codigoCopied.value   = false
+  pagoFile.value       = null
+  pagoPreview.value    = ''
 }
 
 const codigoCopied = ref(false)
@@ -206,13 +256,22 @@ async function confirmarPagoEncargo() {
   pagoLoading.value = true
   pagoError.value   = ''
   try {
+    let urlComprobanteRecibo: string | null = null
+    if (pagoFile.value) {
+      urlComprobanteRecibo = await uploadComprobante(pagoFile.value)
+    }
+
     const estadoPagado = estados.value.find(e => e.idEstadoRecibo === 2) ?? { idEstadoRecibo: 2, nombre: 'Pagado', color: null }
     await Promise.all([
       api.put(`/recibos/${pagoEncargo.value.idRecibo}`, { idEstadoRecibo: 2, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token),
       historialPago.value
         ? api.put(
             `/historial-pago-recibos/${historialPago.value.idHistorialPagoRecibo}`,
-            { pagado: 1, idUsuario: adminAuth.user?.idUsuario },
+            {
+              pagado:    1,
+              idUsuario: adminAuth.user?.idUsuario,
+              ...(urlComprobanteRecibo ? { urlComprobanteRecibo } : {}),
+            },
             adminAuth.token,
           )
         : Promise.resolve(),
@@ -318,7 +377,34 @@ async function fetchRecibos() {
   }
 }
 
-onMounted(() => { fetchEstados(); fetchTiposNotificacion(); fetchRecibos() })
+// --- Pegar imagen desde portapapeles (Ctrl+V) ---
+function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of Array.from(items)) {
+    if (!item.type.startsWith('image/')) continue
+    const file = item.getAsFile()
+    if (!file) continue
+    const preview = URL.createObjectURL(file)
+    if (showConfirm.value) {
+      confirmFile.value    = file
+      confirmPreview.value = preview
+    } else if (showPagoModal.value) {
+      pagoFile.value    = file
+      pagoPreview.value = preview
+    }
+    break
+  }
+}
+
+onMounted(() => {
+  fetchEstados()
+  fetchTiposNotificacion()
+  fetchRecibos()
+  document.addEventListener('paste', handlePaste)
+})
+onUnmounted(() => document.removeEventListener('paste', handlePaste))
+
 watch([search, estadoFiltro], () => { currentPage.value = 1; fetchRecibos() })
 watch(currentPage, fetchRecibos)
 
@@ -346,8 +432,13 @@ function isPagoEncargo(r: Recibo) {
   return r.estado_recibo?.idEstadoRecibo === 4
 }
 
+function isPendienteRevisar(r: Recibo) {
+  return r.estado_recibo?.idEstadoRecibo === 5
+}
+
 function statusClass(r: Recibo) {
   if (isPagoEncargo(r)) return 'bg-orange-100 text-orange-700 ring-2 ring-orange-400 ring-offset-1 font-semibold'
+  if (isPendienteRevisar(r)) return 'bg-amber-100 text-amber-700 ring-2 ring-amber-400 ring-offset-1 font-semibold'
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return 'bg-success-50 text-success-600'
   const days = daysLeft(r.fechaMaxima)
@@ -359,6 +450,7 @@ function statusClass(r: Recibo) {
 
 function statusLabel(r: Recibo) {
   if (isPagoEncargo(r)) return '💰 ' + (r.estado_recibo?.nombre ?? 'Pago por encargo')
+  if (isPendienteRevisar(r)) return '🔎 ' + (r.estado_recibo?.nombre ?? 'Pendiente por revisar')
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return r.estado_recibo?.nombre ?? 'Pagado'
   const days = daysLeft(r.fechaMaxima)
@@ -456,6 +548,8 @@ const pages = computed(() => {
                   'transition-colors',
                   isPagoEncargo(recibo)
                     ? 'bg-orange-50 hover:bg-orange-100 border-l-4 border-orange-400'
+                    : isPendienteRevisar(recibo)
+                    ? 'bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400'
                     : 'hover:bg-slate-50',
                 ]"
               >
@@ -530,9 +624,14 @@ const pages = computed(() => {
                       <Banknote class="w-3.5 h-3.5" /> Pagar
                     </button>
                     <button
-                      v-if="recibo.estado_recibo?.idEstadoRecibo === 1"
+                      v-if="[1, 5].includes(recibo.estado_recibo?.idEstadoRecibo ?? 0)"
                       @click="openConfirmPago(recibo)"
-                      class="text-slate-400 hover:text-success-600 transition p-1.5 rounded-lg hover:bg-success-50"
+                      :class="[
+                        'transition p-1.5 rounded-lg',
+                        isPendienteRevisar(recibo)
+                          ? 'text-amber-600 hover:text-success-600 bg-amber-50 hover:bg-success-50 animate-pulse hover:animate-none'
+                          : 'text-slate-400 hover:text-success-600 hover:bg-success-50',
+                      ]"
                       title="Marcar como pagado"
                     >
                       <CheckCircle class="w-4 h-4" />
@@ -788,6 +887,34 @@ const pages = computed(() => {
               </div>
             </div>
 
+            <!-- Comprobante del admin (prueba del pago realizado) -->
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                Tu comprobante de pago
+                <span class="normal-case font-normal text-slate-400">(opcional)</span>
+              </p>
+              <!-- Preview -->
+              <div v-if="pagoPreview" class="relative rounded-2xl overflow-hidden border border-slate-200">
+                <img :src="pagoPreview" alt="Comprobante" class="w-full max-h-56 object-contain bg-slate-50" />
+                <button
+                  type="button"
+                  @click="clearPagoFile"
+                  class="absolute top-2 right-2 w-7 h-7 bg-white/90 hover:bg-white rounded-full shadow flex items-center justify-center transition"
+                >
+                  <X class="w-3.5 h-3.5 text-slate-600" />
+                </button>
+              </div>
+              <!-- Picker -->
+              <label v-else class="flex flex-col items-center gap-2.5 border-2 border-dashed border-slate-200 hover:border-orange-400 rounded-2xl p-5 cursor-pointer transition-colors group">
+                <ImagePlus class="w-7 h-7 text-slate-300 group-hover:text-orange-400 transition-colors" />
+                <span class="text-xs text-slate-400 text-center">
+                  Adjunta el recibo que te dio la empresa de servicio
+                  <span class="block mt-0.5 text-slate-300">o pega con <kbd class="font-mono bg-slate-100 text-slate-500 px-1 py-0.5 rounded text-[10px]">Ctrl+V</kbd></span>
+                </span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="onPagoFileChange" />
+              </label>
+            </div>
+
             <div v-if="pagoError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
               <AlertCircle class="w-4 h-4 shrink-0" /> {{ pagoError }}
             </div>
@@ -977,6 +1104,33 @@ const pages = computed(() => {
                   <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.cliente.telefonoPrincipal }}</span>
                 </div>
               </div>
+            </div>
+
+            <!-- Adjuntar comprobante -->
+            <div class="w-full">
+              <p class="text-xs text-slate-500 font-medium mb-2 text-left">
+                Comprobante de pago <span class="font-normal text-slate-400">(opcional)</span>
+              </p>
+              <!-- Preview -->
+              <div v-if="confirmPreview" class="relative rounded-xl overflow-hidden border border-slate-200 mb-2">
+                <img :src="confirmPreview" alt="Comprobante" class="w-full max-h-44 object-contain bg-slate-50" />
+                <button
+                  type="button"
+                  @click="clearConfirmFile"
+                  class="absolute top-2 right-2 w-7 h-7 bg-white/90 hover:bg-white rounded-full shadow flex items-center justify-center transition"
+                >
+                  <X class="w-3.5 h-3.5 text-slate-600" />
+                </button>
+              </div>
+              <!-- Picker -->
+              <label v-else class="flex flex-col items-center gap-2 border-2 border-dashed border-slate-200 hover:border-success-400 rounded-xl p-4 cursor-pointer transition-colors group">
+                <ImagePlus class="w-6 h-6 text-slate-300 group-hover:text-success-500 transition-colors" />
+                <span class="text-xs text-slate-400 text-center">
+                  Toca para seleccionar
+                  <span class="block mt-0.5 text-slate-300">o pega con <kbd class="font-mono bg-slate-100 text-slate-500 px-1 py-0.5 rounded text-[10px]">Ctrl+V</kbd></span>
+                </span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="onConfirmFileChange" />
+              </label>
             </div>
 
             <div v-if="confirmError" class="w-full flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">

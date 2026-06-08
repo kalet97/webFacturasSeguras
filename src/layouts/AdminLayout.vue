@@ -4,9 +4,10 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import {
   LayoutDashboard, Users, FileText, Bell, CreditCard,
   CheckSquare, Building2, Settings, LogOut, Menu, X, ChevronRight,
-  UserCog, Tag, CircleDot, ChevronsLeft, ChevronsRight,
+  UserCog, Tag, CircleDot, ChevronsLeft, ChevronsRight, Inbox,
 } from 'lucide-vue-next'
 import { useAdminAuthStore } from '@/stores/adminAuth'
+import AdminNotificationBell from '@/components/admin/AdminNotificationBell.vue'
 
 const route  = useRoute()
 const router = useRouter()
@@ -17,6 +18,7 @@ const collapsed   = ref(false)
 
 const navItems = [
   { label: 'Dashboard',           to: '/admin/dashboard',       icon: LayoutDashboard },
+  { label: 'Notificaciones',      to: '/admin/notificaciones-admin', icon: Inbox },
   { label: 'Clientes',            to: '/admin/clientes',        icon: Users },
   { label: 'Recibos',             to: '/admin/recibos',         icon: FileText },
   { label: 'Pagos',               to: '/admin/pagos',           icon: CreditCard },
@@ -168,6 +170,7 @@ async function handleLogout() {
         </div>
 
         <div class="flex items-center gap-2">
+          <AdminNotificationBell />
           <div class="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
             <span class="text-white text-xs font-bold">{{ userInitials }}</span>
           </div>
