@@ -44,6 +44,9 @@ export const api = {
   put: <T>(path: string, body: unknown, token?: string | null) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }, token),
 
+  delete: <T>(path: string, body: unknown, token?: string | null) =>
+    request<T>(path, { method: 'DELETE', body: JSON.stringify(body) }, token),
+
   upload: <T>(path: string, formData: FormData, token?: string | null) =>
     uploadFile<T>(path, formData, token),
 }

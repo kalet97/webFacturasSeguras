@@ -85,6 +85,33 @@ async function uploadComprobante(file: File): Promise<string> {
   return res.url
 }
 
+// --- Parámetros EPM (código de barras: indicativoEPM + código + consecutivoEPM) ---
+const epmIndicativo  = ref<string | null>(null)
+const epmConsecutivo = ref<string | null>(null)
+
+async function fetchParametrosEPM() {
+  try {
+    const [indicativo, consecutivo] = await Promise.all([
+      api.get<{ valor: string }>('/parametros-generales/indicativoEPM',  adminAuth.token),
+      api.get<{ valor: string }>('/parametros-generales/consecutivoEPM', adminAuth.token),
+    ])
+    epmIndicativo.value  = indicativo?.valor  ?? null
+    epmConsecutivo.value = consecutivo?.valor ?? null
+  } catch {}
+}
+
+function isEmpresaEPM(r: Recibo | null) {
+  return r?.empresa_servicio?.nombre === 'EPM'
+}
+
+const confirmBarcode = computed(() => {
+  if (!confirmRecibo.value) return null
+  if (!isEmpresaEPM(confirmRecibo.value)) return null
+  if (!confirmRecibo.value.codigoRecibo) return null
+  if (!epmIndicativo.value || !epmConsecutivo.value) return null
+  return `${epmIndicativo.value}${confirmRecibo.value.codigoRecibo}${epmConsecutivo.value}`
+})
+
 // --- Confirmación marcar como pagado ---
 const confirmRecibo   = ref<Recibo | null>(null)
 const showConfirm     = ref(false)
@@ -400,6 +427,7 @@ function handlePaste(e: ClipboardEvent) {
 onMounted(() => {
   fetchEstados()
   fetchTiposNotificacion()
+  fetchParametrosEPM()
   fetchRecibos()
   document.addEventListener('paste', handlePaste)
 })
@@ -1086,6 +1114,16 @@ const pages = computed(() => {
                 <div v-if="confirmRecibo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
                   <span class="text-xs text-slate-400">Código</span>
                   <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.codigoRecibo }}</span>
+                </div>
+                <div v-if="confirmBarcode" class="px-4 py-3">
+                  <span class="text-xs text-slate-400 block mb-2">Código de barras (pago EPM)</span>
+                  <div class="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-col items-center gap-1.5">
+                    <div
+                      class="w-full h-9"
+                      style="background-image: repeating-linear-gradient(90deg, #1e293b 0 2px, transparent 2px 4px, #1e293b 4px 5px, transparent 5px 8px); background-size: 100% 100%;"
+                    />
+                    <span class="text-xs font-mono tracking-wider text-slate-700 break-all text-center">{{ confirmBarcode }}</span>
+                  </div>
                 </div>
                 <div v-if="confirmRecibo.tipo_factura" class="flex items-center justify-between px-4 py-3">
                   <span class="text-xs text-slate-400">Tipo de factura</span>

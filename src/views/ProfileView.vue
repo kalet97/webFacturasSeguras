@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, MapPin, Phone, Shield, LogOut, ChevronRight, LayoutDashboard, CreditCard } from 'lucide-vue-next'
+import { User, MapPin, Phone, Shield, LogOut, ChevronRight, LayoutDashboard, CreditCard, Bell, BellOff } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { usePushNotifications } from '@/composables/usePushNotifications'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+const push = usePushNotifications()
+
+function handleTogglePush() {
+  if (push.isSubscribed.value) {
+    push.unsubscribe()
+  } else {
+    push.subscribe()
+  }
+}
 
 const showLogoutModal = ref(false)
 
@@ -126,6 +136,33 @@ function getInitials(name?: string) {
             ${{ auth.user.plan.precio.toLocaleString('es-CO') }}<span class="font-normal text-slate-400 text-xs">/mes</span>
           </p>
         </div>
+      </div>
+
+      <!-- Notificaciones push -->
+      <div v-if="push.isSupported" class="card mb-4">
+        <h3 class="font-bold text-slate-800 mb-3">Notificaciones</h3>
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            :class="push.isSubscribed.value ? 'bg-success-50' : 'bg-slate-100'">
+            <Bell v-if="push.isSubscribed.value" class="w-4 h-4 text-success" />
+            <BellOff v-else class="w-4 h-4 text-slate-400" />
+          </div>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-slate-800">Avisos de vencimiento</p>
+            <p class="text-xs text-slate-500">Recibe una alerta en tu celular cuando una factura esté por vencer</p>
+          </div>
+          <button
+            @click="handleTogglePush"
+            :disabled="push.isLoading.value"
+            class="text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 transition-colors"
+            :class="push.isSubscribed.value
+              ? 'bg-slate-100 text-slate-600'
+              : 'bg-primary-600 text-white'"
+          >
+            {{ push.isLoading.value ? '...' : (push.isSubscribed.value ? 'Desactivar' : 'Activar') }}
+          </button>
+        </div>
+        <p v-if="push.error.value" class="text-xs text-danger mt-2">{{ push.error.value }}</p>
       </div>
 
       <div v-if="auth.isAdmin" class="card mb-4">
