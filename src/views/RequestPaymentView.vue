@@ -21,6 +21,10 @@ const nequiNumber  = ref<string | null>(null)
 const nequiTitular = ref<string | null>(null)
 
 onMounted(async () => {
+  if (!recibo.value) {
+    await store.fetchRecibos().catch(() => {})
+  }
+
   try {
     const [numParam, titularParam] = await Promise.all([
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequi',        auth.token),
@@ -73,7 +77,11 @@ async function confirmPayment() {
   <div class="screen">
     <AppHeader title="Solicitar pago" />
 
-    <div v-if="!submitted" class="flex-1 overflow-y-auto px-4 pb-8">
+    <div v-if="!recibo" class="flex-1 flex items-center justify-center">
+      <p class="text-slate-400">Recibo no encontrado</p>
+    </div>
+
+    <div v-else-if="!submitted" class="flex-1 overflow-y-auto px-4 pb-8">
       <div class="card mb-4">
         <div class="flex items-center gap-3 mb-4">
           <div :class="['w-11 h-11 rounded-xl flex items-center justify-center text-2xl', store.serviceColors[recibo?.serviceType ?? 'energia']]">

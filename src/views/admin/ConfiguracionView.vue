@@ -76,11 +76,18 @@ async function saveParametro(p: Parametro) {
   }
 }
 
+const TEXTAREA_PARAMS = new Set(['mensajeWhatsapp'])
+
+const WHATSAPP_VARS = ['{nombre}', '{empresa}', '{servicio}', '{monto}', '{fechaMaxima}', '{diasRestantes}']
+
 // Etiquetas legibles por nombre de parámetro
 const labels: Record<string, { label: string; icon: string }> = {
-  nequi:            { label: 'Número Nequi',               icon: '💸' },
-  nequi_titular:    { label: 'Titular de la cuenta Nequi', icon: '👤' },
-  consecutivo_luz:  { label: 'Consecutivo de energía',     icon: '⚡' },
+  nequi:             { label: 'Número Nequi',                        icon: '💸' },
+  nequiTitular:      { label: 'Titular de la cuenta Nequi',          icon: '👤' },
+  consecutivoEPM:    { label: 'Consecutivo de energía (EPM)',        icon: '⚡' },
+  indicativoEPM:     { label: 'Indicativo EPM (prefijo código barras)', icon: '🔢' },
+  diasNotificacion:  { label: 'Días de anticipación para notificar', icon: '🔔' },
+  mensajeWhatsapp:   { label: 'Mensaje de WhatsApp (recordatorio)',  icon: '💬' },
 }
 
 function getLabel(nombre: string) {
@@ -168,7 +175,17 @@ onMounted(fetchParametros)
 
         <!-- Valor (edición) -->
         <div v-else class="flex flex-col gap-2">
+          <textarea
+            v-if="TEXTAREA_PARAMS.has(p.nombre)"
+            v-model="editing[p.idParametroGeneral]"
+            rows="4"
+            class="w-full px-4 py-3 border border-primary-300 rounded-xl text-sm font-mono text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition resize-none"
+            @keyup.escape="cancelEdit(p.idParametroGeneral)"
+            autofocus
+          />
           <input
+            v-else
             v-model="editing[p.idParametroGeneral]"
             type="text"
             class="w-full px-4 py-3 border border-primary-300 rounded-xl text-sm font-mono text-slate-800
@@ -177,6 +194,14 @@ onMounted(fetchParametros)
             @keyup.escape="cancelEdit(p.idParametroGeneral)"
             autofocus
           />
+          <div v-if="p.nombre === 'mensajeWhatsapp'" class="flex flex-wrap gap-1.5">
+            <span
+              v-for="v in WHATSAPP_VARS" :key="v"
+              class="text-[10px] font-mono bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg cursor-pointer hover:bg-primary-50 hover:text-primary-600 transition"
+              :title="`Insertar ${v}`"
+              @click="editing[p.idParametroGeneral] += v"
+            >{{ v }}</span>
+          </div>
 
           <div v-if="saveError[p.idParametroGeneral]" class="flex items-center gap-2 text-xs text-danger bg-danger-50 rounded-xl px-3 py-2">
             <AlertCircle class="w-3.5 h-3.5 shrink-0" /> {{ saveError[p.idParametroGeneral] }}
