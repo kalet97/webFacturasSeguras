@@ -37,8 +37,12 @@ onMounted(async () => {
   }
 })
 
-const COMMISSION_RATE = 0.05
-const commission = computed(() => Math.ceil((recibo.value?.amount ?? 0) * COMMISSION_RATE / 100) * 100)
+const commission = computed(() => {
+  const plan = auth.user?.plan
+  const amount = recibo.value?.amount ?? 0
+  if (!plan || amount <= plan.maxPrecioPorFactura) return 0
+  return Math.round((amount - plan.maxPrecioPorFactura) * 0.004)
+})
 const total = computed(() => (recibo.value?.amount ?? 0) + commission.value)
 
 const fileRef = ref<HTMLInputElement | null>(null)
@@ -98,9 +102,9 @@ async function confirmPayment() {
             <span class="text-sm text-slate-600">Valor del recibo</span>
             <span class="font-semibold text-slate-800">{{ formatCurrency(recibo?.amount ?? 0) }}</span>
           </div>
-          <div class="flex justify-between items-center py-2 border-b border-slate-50">
+          <div v-if="commission > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm text-slate-600">Comisión servicio (5%)</span>
+              <span class="text-sm text-slate-600">Cargo adicional (4x1000)</span>
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
             <span class="font-semibold text-slate-800">{{ formatCurrency(commission) }}</span>
