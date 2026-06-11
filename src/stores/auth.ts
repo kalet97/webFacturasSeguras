@@ -108,8 +108,8 @@ export const useAuthStore = defineStore('auth', () => {
     idPlan: number
   }): Promise<void> {
     const { idPlan, ...clienteData } = data
-    const cliente = await api.post<{ idCliente: number }>('/clientes', clienteData)
-    await api.post('/suscripciones', { idCliente: cliente.idCliente, idPlan })
+    const cliente = await api.post<{ idCliente: number }>('/clientes', data)
+    // await api.post('/suscripciones', { idCliente: cliente.idCliente, idPlan })
     await login(String(data.cedula), data.clave)
   }
 
