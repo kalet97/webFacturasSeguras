@@ -21,6 +21,7 @@ export interface User {
   correo: string
   role: 'client' | 'admin'
   plan: PlanInfo | null
+  fechaProximoPago: string | null
 }
 
 interface ClienteResponse {
@@ -32,7 +33,7 @@ interface ClienteResponse {
   telefonoSecundario: number | null
   direccion: string | null
   activo: number
-  suscripcion_activa?: { plan: PlanInfo } | null
+  suscripcion_activa?: { plan: PlanInfo; fechaProximoPago: string | null } | null
 }
 
 function mapCliente(c: ClienteResponse): User {
@@ -47,6 +48,7 @@ function mapCliente(c: ClienteResponse): User {
     correo:             c.correo,
     role:               'client',
     plan:               c.suscripcion_activa?.plan ?? null,
+    fechaProximoPago:   c.suscripcion_activa?.fechaProximoPago ?? null,
   }
 }
 
@@ -113,6 +115,13 @@ export const useAuthStore = defineStore('auth', () => {
     await login(String(data.cedula), data.clave)
   }
 
+  async function refreshUser(): Promise<void> {
+    if (!user.value || !token.value) return
+    const updated = await api.get<ClienteResponse>(`/clientes/${user.value.idCliente}`, token.value)
+    user.value = mapCliente(updated)
+    localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+  }
+
   async function updateProfile(data: {
     nombre?: string
     apellido?: string
@@ -130,5 +139,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(user.value))
   }
 
-  return { user, token, isAuthenticated, isAdmin, login, logout, restoreSession, register, updateProfile }
+  return { user, token, isAuthenticated, isAdmin, login, logout, restoreSession, register, updateProfile, refreshUser }
 })

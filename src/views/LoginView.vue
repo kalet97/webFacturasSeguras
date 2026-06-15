@@ -44,8 +44,6 @@ async function handleLogin() {
     <div class="flex-1 flex flex-col px-6 pt-12 pb-8">
       <div class="mb-10 flex flex-col items-center text-center">
         <img src="@/assets/logo.svg" alt="Recibos Seguro" class="h-44 w-auto mb-2" />
-        <h1 class="text-2xl font-bold text-slate-800">Bienvenido 👋</h1>
-        <p class="text-slate-500 mt-1 text-sm">Inicia sesión para continuar</p>
       </div>
 
       <form @submit.prevent="handleLogin" class="flex flex-col gap-4">

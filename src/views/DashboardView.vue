@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Bell, TrendingDown, X, Check, ArrowUp } from 'lucide-vue-next'
+import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useRecibosStore } from '@/stores/recibos'
 import { api } from '@/services/api'
@@ -55,7 +55,7 @@ async function fetchPlanes() {
   } catch {}
 }
 
-onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes() })
+onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes(); auth.refreshUser() })
 
 const total = computed(() => store.recibos.length)
 const overdue = computed(() => store.recibos.filter(r => r.status === 'overdue').length)
@@ -82,6 +82,19 @@ function greeting() {
 const sortedRecibos = computed(() => {
   const order = { overdue: 0, soon: 1, processing: 2, reviewing: 3, pending: 4, paid: 5 }
   return [...store.recibos].sort((a, b) => order[a.status] - order[b.status])
+})
+
+const diasParaVencerSuscripcion = computed(() => {
+  const fecha = auth.user?.fechaProximoPago
+  if (!fecha) return null
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const venc = new Date(fecha); venc.setHours(0, 0, 0, 0)
+  return Math.round((venc.getTime() - hoy.getTime()) / 86400000)
+})
+
+const mostrarAvisoSuscripcion = computed(() => {
+  const d = diasParaVencerSuscripcion.value
+  return d !== null && d <= 5
 })
 </script>
 
@@ -124,6 +137,20 @@ const sortedRecibos = computed(() => {
     </div>
 
     <div class="px-4 -mt-3">
+      <div v-if="mostrarAvisoSuscripcion" class="mb-4 bg-warning-50 border border-warning/20 rounded-2xl p-3.5 flex items-center gap-3">
+        <div class="w-9 h-9 bg-warning/10 rounded-xl flex items-center justify-center shrink-0">
+          <CalendarClock class="w-5 h-5 text-warning-600" />
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-warning-600">
+            <template v-if="diasParaVencerSuscripcion! < 0">Tu suscripción venció</template>
+            <template v-else-if="diasParaVencerSuscripcion === 0">Tu suscripción vence hoy</template>
+            <template v-else>Tu suscripción vence en {{ diasParaVencerSuscripcion }} día{{ diasParaVencerSuscripcion !== 1 ? 's' : '' }}</template>
+          </p>
+          <p class="text-xs text-slate-500 mt-0.5">Renueva tu plan para seguir disfrutando del servicio</p>
+        </div>
+      </div>
+
       <div class="grid grid-cols-3 gap-3 mb-6">
         <div class="card text-center">
           <p class="text-2xl font-black text-slate-800">{{ total }}</p>
