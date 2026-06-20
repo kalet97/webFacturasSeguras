@@ -118,7 +118,7 @@ async function confirmPayment() {
 
       <div class="card mb-4">
         <h3 class="font-bold text-slate-800 mb-1">Paga por Nequi</h3>
-        <p class="text-xs text-slate-500 mb-4">Escanea el código QR o transfiere al número</p>
+        <!-- <p class="text-xs text-slate-500 mb-4">Escanea el código QR o transfiere al número</p>
         <div class="flex justify-center mb-4">
           <div class="w-40 h-40 bg-slate-100 rounded-2xl flex items-center justify-center">
             <svg viewBox="0 0 100 100" class="w-32 h-32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -149,7 +149,7 @@ async function confirmPayment() {
               <rect x="53" y="83" width="6" height="6" fill="#1e293b"/>
             </svg>
           </div>
-        </div>
+        </div> -->
         <div class="bg-primary-50 rounded-2xl p-3 text-center">
           <p class="text-xs text-slate-500">Número Nequi</p>
           <p v-if="nequiNumber" class="font-bold text-primary-600 text-lg mt-0.5">{{ nequiNumber }}</p>

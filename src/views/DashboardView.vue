@@ -9,12 +9,11 @@ import type { PlanInfo } from '@/stores/auth'
 import ReciboCard from '@/components/ReciboCard.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 
-const WHATSAPP_NUMBER = '573001234567' // reemplaza con el número del negocio
-
 const router = useRouter()
 const auth = useAuthStore()
 const store = useRecibosStore()
 
+const whatsappNumber    = ref('')
 const deudaPendiente    = ref(0)
 const showLimitModal    = ref(false)
 const todosLosPlanes    = ref<PlanInfo[]>([])
@@ -55,7 +54,14 @@ async function fetchPlanes() {
   } catch {}
 }
 
-onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes(); auth.refreshUser() })
+async function fetchWhatsapp() {
+  try {
+    const res = await api.get<{ valor: string }>('/parametros-generales/whatsapp', auth.token)
+    whatsappNumber.value = res.valor
+  } catch {}
+}
+
+onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes(); fetchWhatsapp(); auth.refreshUser() })
 
 const total = computed(() => store.recibos.length)
 const overdue = computed(() => store.recibos.filter(r => r.status === 'overdue').length)
@@ -198,9 +204,9 @@ const mostrarAvisoSuscripcion = computed(() => {
       </div>
     </div>
 
-    <div class="fixed bottom-20 right-4 z-40">
+    <div v-if="whatsappNumber" class="fixed bottom-20 right-4 z-40">
       <a
-        :href="`https://wa.me/${WHATSAPP_NUMBER}`"
+        :href="`https://wa.me/${whatsappNumber}`"
         target="_blank"
         rel="noopener noreferrer"
         class="w-14 h-14 bg-[#25D366] rounded-2xl shadow-lg flex items-center justify-center active:scale-95 transition-transform"

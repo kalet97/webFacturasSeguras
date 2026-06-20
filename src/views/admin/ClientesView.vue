@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { Plus, Pencil, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight, Trash2, FileText } from 'lucide-vue-next'
+import { Plus, Pencil, AlertCircle, RefreshCw, Search, ChevronLeft, ChevronRight, Trash2, FileText, CreditCard, RefreshCcw, ArrowRightLeft } from 'lucide-vue-next'
 import CrudModal from '@/components/admin/CrudModal.vue'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
 
-interface SuscripcionActiva { plan: { idPlan: number; nombre: string } | null; fechaProximoPago: string | null }
+interface PlanInfo { idPlan: number; nombre: string; precio: number; maxFacturas: number | null; maxPrecioPorFactura: number }
+interface SuscripcionActiva { idSuscripcion: number; idPlan: number; plan: PlanInfo | null; fechaProximoPago: string | null; fechaInicio: string | null }
+
 interface Cliente {
   idCliente: number; nombre: string; apellido: string; cedula: number
   correo: string; telefonoPrincipal: number; telefonoSecundario: number | null
@@ -87,8 +89,11 @@ function openEdit(item: Cliente) {
     activo: Boolean(item.activo),
   }
   recibos.value = []
+  suscripcionActiva.value = null
+  showChangePlan.value = false
   showModal.value = true
   fetchRecibosCliente(item.idCliente)
+  fetchSuscripcion(item.idCliente)
   if (empresas.value.length === 0) fetchCatalogos()
 }
 
@@ -109,6 +114,74 @@ const savingRecibo     = ref(false)
 const reciboFormError  = ref('')
 const deletingReciboId = ref<number | null>(null)
 
+// --- Suscripción / Plan ---
+const planes             = ref<PlanInfo[]>([])
+const suscripcionActiva  = ref<SuscripcionActiva | null>(null)
+const loadingSuscripcion = ref(false)
+const changingPlan       = ref(false)
+const renewingPlan       = ref(false)
+const planError          = ref('')
+const selectedPlanId     = ref<number | null>(null)
+const showChangePlan     = ref(false)
+
+async function fetchPlanes() {
+  if (planes.value.length > 0) return
+  try { planes.value = await api.get<PlanInfo[]>('/planes', adminAuth.token) } catch {}
+}
+
+async function fetchSuscripcion(idCliente: number) {
+  loadingSuscripcion.value = true
+  planError.value = ''
+  try {
+    suscripcionActiva.value = await api.get<SuscripcionActiva>(`/clientes/${idCliente}/suscripcion`, adminAuth.token)
+  } catch {
+    suscripcionActiva.value = null
+  } finally {
+    loadingSuscripcion.value = false
+  }
+}
+
+function openChangePlan() {
+  selectedPlanId.value = suscripcionActiva.value?.idPlan ?? null
+  planError.value = ''
+  showChangePlan.value = true
+  fetchPlanes()
+}
+
+async function cambiarPlan() {
+  if (!editing.value || !selectedPlanId.value) return
+  if (suscripcionActiva.value && selectedPlanId.value === suscripcionActiva.value.idPlan) return
+  changingPlan.value = true
+  planError.value = ''
+  try {
+    if (suscripcionActiva.value) {
+      await api.put(`/suscripciones/${suscripcionActiva.value.idSuscripcion}`, { idPlan: selectedPlanId.value }, adminAuth.token)
+    } else {
+      await api.post('/suscripciones', { idCliente: editing.value.idCliente, idPlan: selectedPlanId.value }, adminAuth.token)
+    }
+    await fetchSuscripcion(editing.value.idCliente)
+    showChangePlan.value = false
+  } catch (e: unknown) {
+    planError.value = e instanceof Error ? e.message : 'Error al cambiar el plan'
+  } finally {
+    changingPlan.value = false
+  }
+}
+
+async function renovarSuscripcion() {
+  if (!editing.value || !suscripcionActiva.value) return
+  renewingPlan.value = true
+  planError.value = ''
+  try {
+    await api.put(`/suscripciones/${suscripcionActiva.value.idSuscripcion}/renovar`, {}, adminAuth.token)
+    await fetchSuscripcion(editing.value.idCliente)
+  } catch (e: unknown) {
+    planError.value = e instanceof Error ? e.message : 'Error al renovar'
+  } finally {
+    renewingPlan.value = false
+  }
+}
+
 const emptyReciboForm = () => ({
   nombre: '', codigoRecibo: '', precio: '',
   idEmpresaServicio: '', idEstadoRecibo: '',
@@ -128,12 +201,18 @@ async function fetchCatalogos() {
 async function fetchRecibosCliente(idCliente: number) {
   loadingRecibos.value = true
   try {
-    recibos.value = await api.get<Recibo[]>(`/clientes/${idCliente}/recibos`, adminAuth.token)
+    recibos.value = await api.get<Recibo[]>(`/clientes/${idCliente}/recibos?incluirEliminados=1`, adminAuth.token)
   } catch {
     recibos.value = []
   } finally {
     loadingRecibos.value = false
   }
+}
+
+const ESTADO_ELIMINADO = 6
+
+function isEliminado(r: Recibo) {
+  return r.estado_recibo?.idEstadoRecibo === ESTADO_ELIMINADO
 }
 
 function openReciboCreate() {
@@ -207,11 +286,11 @@ async function submitRecibo() {
 }
 
 async function deleteRecibo(r: Recibo) {
-  if (!confirm(`¿Eliminar la factura "${r.nombre}"? Esta acción no se puede deshacer.`)) return
+  if (!confirm(`¿Eliminar la factura "${r.nombre}"?`)) return
   if (!editing.value) return
   deletingReciboId.value = r.idRecibo
   try {
-    await api.delete(`/recibos/${r.idRecibo}`, {}, adminAuth.token)
+    await api.put(`/recibos/${r.idRecibo}`, { idEstadoRecibo: ESTADO_ELIMINADO, idUsuario: adminAuth.user?.idUsuario ?? null }, adminAuth.token)
     await fetchRecibosCliente(editing.value.idCliente)
   } catch {
     // silencioso
@@ -439,6 +518,130 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
           </button>
         </div>
 
+        <!-- Suscripción / Plan (solo en edición) -->
+        <template v-if="editing">
+          <div class="h-px bg-slate-100 my-1" />
+
+          <div class="flex items-center gap-2 mb-2">
+            <CreditCard class="w-4 h-4 text-slate-400" />
+            <p class="text-sm font-semibold text-slate-700">Suscripción</p>
+          </div>
+
+          <div v-if="loadingSuscripcion" class="flex justify-center py-3">
+            <div class="w-5 h-5 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          </div>
+
+          <template v-else>
+            <!-- Sin suscripción -->
+            <div v-if="!suscripcionActiva" class="bg-slate-50 rounded-xl p-4 text-center">
+              <p class="text-sm text-slate-400 italic mb-3">Sin suscripción activa</p>
+              <button
+                type="button"
+                @click="openChangePlan"
+                class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition"
+              >
+                <Plus class="w-3.5 h-3.5" /> Asignar plan
+              </button>
+            </div>
+
+            <!-- Con suscripción -->
+            <div v-else class="bg-slate-50 rounded-xl overflow-hidden">
+              <div class="divide-y divide-slate-100">
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Plan actual</span>
+                  <span class="text-sm font-semibold text-primary-600">{{ suscripcionActiva.plan?.nombre ?? '—' }}</span>
+                </div>
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Precio</span>
+                  <span class="text-sm font-medium text-slate-700">{{ suscripcionActiva.plan ? formatPrecio(suscripcionActiva.plan.precio) : '—' }}</span>
+                </div>
+                <div class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Próximo pago</span>
+                  <span
+                    class="text-sm font-medium"
+                    :class="suscripcionActiva.fechaProximoPago && proximoPagoUrgente(suscripcionActiva.fechaProximoPago) ? 'text-danger' : 'text-slate-700'"
+                  >
+                    {{ formatFecha(suscripcionActiva.fechaProximoPago) }}
+                  </span>
+                </div>
+                <div v-if="suscripcionActiva.plan" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Límite facturas</span>
+                  <span class="text-sm text-slate-700">{{ suscripcionActiva.plan.maxFacturas ?? 'Ilimitadas' }}</span>
+                </div>
+              </div>
+
+              <div class="flex gap-2 px-4 py-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  @click="renovarSuscripcion"
+                  :disabled="renewingPlan"
+                  class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-white bg-success-600 hover:bg-success-700 rounded-lg transition disabled:opacity-50"
+                >
+                  <RefreshCcw :class="['w-3.5 h-3.5', renewingPlan && 'animate-spin']" />
+                  {{ renewingPlan ? 'Renovando...' : 'Renovar pago (+1 mes)' }}
+                </button>
+                <button
+                  type="button"
+                  @click="openChangePlan"
+                  class="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition"
+                >
+                  <ArrowRightLeft class="w-3.5 h-3.5" />
+                  Cambiar plan
+                </button>
+              </div>
+            </div>
+
+            <!-- Selector de plan (expandible) -->
+            <div v-if="showChangePlan" class="mt-3 border border-slate-200 rounded-xl p-4 bg-white">
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Seleccionar plan</p>
+              <div class="flex flex-col gap-2">
+                <button
+                  v-for="p in planes"
+                  :key="p.idPlan"
+                  type="button"
+                  @click="selectedPlanId = p.idPlan"
+                  :class="[
+                    'flex items-center justify-between px-4 py-3 rounded-xl border-2 text-left transition',
+                    selectedPlanId === p.idPlan
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  ]"
+                >
+                  <div>
+                    <p class="text-sm font-semibold text-slate-800">{{ p.nombre }}</p>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                      {{ p.maxFacturas ? `Hasta ${p.maxFacturas} facturas` : 'Facturas ilimitadas' }}
+                      · Tope {{ formatPrecio(p.maxPrecioPorFactura) }}
+                    </p>
+                  </div>
+                  <div class="text-right shrink-0 ml-3">
+                    <p class="font-bold text-primary-600">{{ formatPrecio(p.precio) }}</p>
+                    <p class="text-xs text-slate-400">/mes</p>
+                  </div>
+                </button>
+              </div>
+              <div class="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  @click="showChangePlan = false"
+                  :disabled="changingPlan"
+                  class="flex-1 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition disabled:opacity-50"
+                >Cancelar</button>
+                <button
+                  type="button"
+                  @click="cambiarPlan"
+                  :disabled="changingPlan || !selectedPlanId || selectedPlanId === suscripcionActiva?.idPlan"
+                  class="flex-1 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition disabled:opacity-50"
+                >{{ changingPlan ? 'Guardando...' : 'Confirmar cambio' }}</button>
+              </div>
+            </div>
+
+            <div v-if="planError" class="flex items-center gap-2 text-xs text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2 mt-2">
+              <AlertCircle class="w-3.5 h-3.5 shrink-0" /> {{ planError }}
+            </div>
+          </template>
+        </template>
+
         <!-- Facturas del cliente (solo en edición) -->
         <template v-if="editing">
           <div class="h-px bg-slate-100 my-1" />
@@ -447,7 +650,7 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
             <div class="flex items-center gap-2">
               <FileText class="w-4 h-4 text-slate-400" />
               <p class="text-sm font-semibold text-slate-700">Facturas</p>
-              <span class="text-xs text-slate-400">({{ recibos.length }})</span>
+              <span class="text-xs text-slate-400">({{ recibos.filter(r => !isEliminado(r)).length }})</span>
             </div>
             <button
               type="button"
@@ -481,8 +684,15 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <tr v-for="r in recibos" :key="r.idRecibo" class="hover:bg-slate-50 transition-colors">
-                  <td class="px-3 py-2.5 font-medium text-slate-800">{{ r.nombre }}</td>
+                <tr
+                  v-for="r in recibos"
+                  :key="r.idRecibo"
+                  :class="[
+                    'transition-colors',
+                    isEliminado(r) ? 'opacity-50 bg-slate-50' : 'hover:bg-slate-50',
+                  ]"
+                >
+                  <td class="px-3 py-2.5 font-medium" :class="isEliminado(r) ? 'text-slate-400 line-through' : 'text-slate-800'">{{ r.nombre }}</td>
                   <td class="px-3 py-2.5 text-slate-500">{{ r.empresa_servicio?.nombre ?? '—' }}</td>
                   <td class="px-3 py-2.5 text-slate-700 font-mono">{{ formatPrecio(r.precio) }}</td>
                   <td class="px-3 py-2.5 text-slate-500">{{ formatFecha(r.fechaMaxima) }}</td>
@@ -495,7 +705,7 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                     <span v-else class="text-slate-400">—</span>
                   </td>
                   <td class="px-3 py-2.5">
-                    <div class="flex items-center gap-1 justify-end">
+                    <div v-if="!isEliminado(r)" class="flex items-center gap-1 justify-end">
                       <button
                         type="button"
                         @click="openReciboEdit(r)"
@@ -570,7 +780,7 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                   <label class="block text-xs font-medium text-slate-700 mb-1.5">Estado <span class="text-danger">*</span></label>
                   <select v-model="reciboForm.idEstadoRecibo" :class="inputClass">
                     <option value="">Seleccionar...</option>
-                    <option v-for="e in estados" :key="e.idEstadoRecibo" :value="String(e.idEstadoRecibo)">{{ e.nombre }}</option>
+                    <option v-for="e in estados.filter(e => e.idEstadoRecibo !== ESTADO_ELIMINADO)" :key="e.idEstadoRecibo" :value="String(e.idEstadoRecibo)">{{ e.nombre }}</option>
                   </select>
                 </div>
 

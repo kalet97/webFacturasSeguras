@@ -88,11 +88,11 @@ async function handleLogin() {
           {{ error }}
         </div>
 
-        <div class="flex justify-end">
+        <!-- <div class="flex justify-end">
           <button type="button" class="text-sm text-primary-600 font-medium hover:underline">
             ¿Olvidaste tu contraseña?
           </button>
-        </div>
+        </div> -->
 
         <AppButton type="submit" :loading="loading" class="mt-2">
           Ingresar

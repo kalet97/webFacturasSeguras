@@ -68,6 +68,11 @@ const total        = ref(0)
 const perPage      = ref(20)
 const estados      = ref<Estado[]>([])
 
+// --- Contadores por estado ---
+const contadores       = ref<Record<number, number>>({})
+const totalGeneral     = ref(0)
+const loadingContadores = ref(false)
+
 // --- Panel detalle ---
 const selected  = ref<Recibo | null>(null)
 const showPanel = ref(false)
@@ -195,6 +200,7 @@ async function markAsPagado() {
       selected.value = { ...selected.value, estado_recibo: estadoPagado }
     }
     closeConfirm()
+    fetchContadores()
   } catch (e: unknown) {
     confirmError.value = e instanceof Error ? e.message : 'Error al actualizar el recibo'
   } finally {
@@ -235,6 +241,7 @@ async function cambiarEstado() {
       selected.value = { ...selected.value, estado_recibo: nuevoEstado }
     }
     closeEstadoModal()
+    fetchContadores()
   } catch (e: unknown) {
     estadoError.value = e instanceof Error ? e.message : 'Error al cambiar el estado'
   } finally {
@@ -330,6 +337,7 @@ async function confirmarPagoEncargo() {
       selected.value = { ...selected.value, estado_recibo: estadoPagado }
     }
     closePagoModal()
+    fetchContadores()
   } catch (e: unknown) {
     pagoError.value = e instanceof Error ? e.message : 'Error al confirmar el pago'
   } finally {
@@ -425,6 +433,45 @@ async function fetchRecibos() {
   }
 }
 
+async function fetchContadores() {
+  if (estados.value.length === 0) return
+  loadingContadores.value = true
+  try {
+    const [todosRes, ...estadoRes] = await Promise.all([
+      api.get<Paginator>('/recibos?page=1', adminAuth.token),
+      ...estados.value.map(e =>
+        api.get<Paginator>(`/recibos?page=1&estado=${e.idEstadoRecibo}`, adminAuth.token)
+      ),
+    ])
+    totalGeneral.value = todosRes.total
+    estados.value.forEach((e, i) => {
+      contadores.value[e.idEstadoRecibo] = estadoRes[i].total
+    })
+  } catch {}
+  loadingContadores.value = false
+}
+
+function selectEstadoCard(idEstado: number | null) {
+  estadoFiltro.value = idEstado != null ? String(idEstado) : ''
+}
+
+const estadoIconColors: Record<string, { bg: string; text: string; ring: string }> = {
+  pendiente:  { bg: 'bg-slate-100',   text: 'text-slate-600',   ring: 'ring-slate-300' },
+  pagado:     { bg: 'bg-success-50',   text: 'text-success-600', ring: 'ring-success-400' },
+  pago:       { bg: 'bg-success-50',   text: 'text-success-600', ring: 'ring-success-400' },
+  vencido:    { bg: 'bg-danger-50',    text: 'text-danger',      ring: 'ring-danger' },
+  encargo:    { bg: 'bg-orange-50',    text: 'text-orange-600',  ring: 'ring-orange-400' },
+  revisar:    { bg: 'bg-amber-50',     text: 'text-amber-600',   ring: 'ring-amber-400' },
+}
+
+function cardStyle(e: Estado) {
+  const nombre = e.nombre.toLowerCase()
+  for (const key of Object.keys(estadoIconColors)) {
+    if (nombre.includes(key)) return estadoIconColors[key]
+  }
+  return { bg: 'bg-primary-50', text: 'text-primary-600', ring: 'ring-primary-400' }
+}
+
 // --- Pegar imagen desde portapapeles (Ctrl+V) ---
 function handlePaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items
@@ -445,8 +492,9 @@ function handlePaste(e: ClipboardEvent) {
   }
 }
 
-onMounted(() => {
-  fetchEstados()
+onMounted(async () => {
+  await fetchEstados()
+  fetchContadores()
   fetchTiposNotificacion()
   fetchParametrosEPM()
   fetchRecibos()
@@ -559,6 +607,46 @@ const pages = computed(() => {
 <template>
   <div class="p-6 lg:p-8 mx-4">
 
+    <!-- Cards contadores por estado -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      <!-- Card: Todos -->
+      <button
+        @click="selectEstadoCard(null)"
+        :class="[
+          'flex flex-col items-center gap-1 px-4 py-4 rounded-2xl border-2 transition-all text-center',
+          estadoFiltro === ''
+            ? 'border-primary-500 bg-primary-50 shadow-sm ring-2 ring-primary-200'
+            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+        ]"
+      >
+        <p :class="['text-2xl font-black', estadoFiltro === '' ? 'text-primary-600' : 'text-slate-800']">
+          {{ loadingContadores ? '...' : totalGeneral }}
+        </p>
+        <p class="text-xs font-medium text-slate-500">Todos</p>
+      </button>
+
+      <!-- Cards por estado -->
+      <button
+        v-for="e in estados"
+        :key="e.idEstadoRecibo"
+        @click="selectEstadoCard(e.idEstadoRecibo)"
+        :class="[
+          'flex flex-col items-center gap-1 px-4 py-4 rounded-2xl border-2 transition-all text-center',
+          estadoFiltro === String(e.idEstadoRecibo)
+            ? `border-transparent ${cardStyle(e).bg} shadow-sm ring-2 ${cardStyle(e).ring}`
+            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+        ]"
+      >
+        <p :class="['text-2xl font-black', estadoFiltro === String(e.idEstadoRecibo) ? cardStyle(e).text : 'text-slate-800']">
+          {{ loadingContadores ? '...' : (contadores[e.idEstadoRecibo] ?? 0) }}
+        </p>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full shrink-0" :style="{ backgroundColor: e.color ?? '#94a3b8' }" />
+          <p class="text-xs font-medium text-slate-500 truncate">{{ e.nombre }}</p>
+        </div>
+      </button>
+    </div>
+
     <!-- Encabezado -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
       <div>
@@ -593,6 +681,8 @@ const pages = computed(() => {
         <option v-for="e in estados" :key="e.idEstadoRecibo" :value="e.idEstadoRecibo">{{ e.nombre }}</option>
       </select>
     </div>
+
+    
 
     <!-- Error -->
     <div v-if="error" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-4 py-3 mb-5">
