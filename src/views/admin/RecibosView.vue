@@ -4,7 +4,7 @@ import {
   Search, FileText, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
   Building2, Calendar, Hash, MessageCircle, CheckCircle, Bell,
-  Banknote, ImageOff, ArrowLeftRight, ImagePlus, History,
+  Banknote, ImageOff, ArrowLeftRight, ImagePlus, History, Copy,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -127,24 +127,75 @@ async function fetchParametrosEPM() {
 }
 
 function isEmpresaEPM(r: Recibo | null) {
-  return r?.empresa_servicio?.nombre === 'EPM'
+  return r?.empresa_servicio?.idEmpresaServicio === 1
+}
+
+function buildBarcode(codigoRecibo: string | null) {
+  if (!codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
+  return `${epmIndicativo.value}${codigoRecibo}${epmConsecutivo.value}`
 }
 
 const confirmBarcode = computed(() => {
-  if (!confirmRecibo.value) return null
-  if (!isEmpresaEPM(confirmRecibo.value)) return null
-  if (!confirmRecibo.value.codigoRecibo) return null
-  if (!epmIndicativo.value || !epmConsecutivo.value) return null
-  return `${epmIndicativo.value}${confirmRecibo.value.codigoRecibo}${epmConsecutivo.value}`
+  if (!confirmRecibo.value || !isEmpresaEPM(confirmRecibo.value)) return null
+  return buildBarcode(confirmRecibo.value.codigoRecibo)
+})
+
+const confirmBarcode2 = computed(() => {
+  if (!confirmRecibo.value || !isEmpresaEPM(confirmRecibo.value)) return null
+  if (!confirmRecibo.value.codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
+  const num = parseInt(epmConsecutivo.value, 10)
+  if (isNaN(num) || num <= 0) return null
+  const consecutivoMenos1 = String(num - 1).padStart(epmConsecutivo.value.length, '0')
+  return `${epmIndicativo.value}${confirmRecibo.value.codigoRecibo}${consecutivoMenos1}`
+})
+
+const pagoBarcode = computed(() => {
+  if (!pagoEncargo.value || !isEmpresaEPM(pagoEncargo.value)) return null
+  return buildBarcode(pagoEncargo.value.codigoRecibo)
+})
+
+const pagoBarcode2 = computed(() => {
+  if (!pagoEncargo.value || !isEmpresaEPM(pagoEncargo.value)) return null
+  if (!pagoEncargo.value.codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
+  const num = parseInt(epmConsecutivo.value, 10)
+  if (isNaN(num) || num <= 0) return null
+  const consecutivoMenos1 = String(num - 1).padStart(epmConsecutivo.value.length, '0')
+  return `${epmIndicativo.value}${pagoEncargo.value.codigoRecibo}${consecutivoMenos1}`
 })
 
 // --- Confirmación marcar como pagado ---
-const confirmRecibo   = ref<Recibo | null>(null)
-const showConfirm     = ref(false)
-const confirmLoading  = ref(false)
-const confirmError    = ref('')
-const confirmFile     = ref<File | null>(null)
-const confirmPreview  = ref('')
+const confirmRecibo        = ref<Recibo | null>(null)
+const showConfirm          = ref(false)
+const confirmLoading       = ref(false)
+const confirmError         = ref('')
+const confirmFile          = ref<File | null>(null)
+const confirmPreview       = ref('')
+const confirmCodigoCopied  = ref(false)
+const confirmBarcodeCopied  = ref(false)
+const confirmBarcodeCopied2 = ref(false)
+
+function copiarConfirmCodigo() {
+  const codigo = confirmRecibo.value?.codigoRecibo
+  if (!codigo) return
+  navigator.clipboard.writeText(codigo).then(() => {
+    confirmCodigoCopied.value = true
+    setTimeout(() => { confirmCodigoCopied.value = false }, 2500)
+  })
+}
+function copiarConfirmBarcode() {
+  if (!confirmBarcode.value) return
+  navigator.clipboard.writeText(confirmBarcode.value).then(() => {
+    confirmBarcodeCopied.value = true
+    setTimeout(() => { confirmBarcodeCopied.value = false }, 2500)
+  })
+}
+function copiarConfirmBarcode2() {
+  if (!confirmBarcode2.value) return
+  navigator.clipboard.writeText(confirmBarcode2.value).then(() => {
+    confirmBarcodeCopied2.value = true
+    setTimeout(() => { confirmBarcodeCopied2.value = false }, 2500)
+  })
+}
 
 function onConfirmFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0] ?? null
@@ -162,11 +213,14 @@ function openConfirmPago(r: Recibo) {
 }
 
 function closeConfirm() {
-  showConfirm.value    = false
-  confirmRecibo.value  = null
-  confirmError.value   = ''
-  confirmFile.value    = null
-  confirmPreview.value = ''
+  showConfirm.value           = false
+  confirmRecibo.value         = null
+  confirmError.value          = ''
+  confirmFile.value           = null
+  confirmPreview.value        = ''
+  confirmCodigoCopied.value   = false
+  confirmBarcodeCopied.value  = false
+  confirmBarcodeCopied2.value = false
 }
 
 async function markAsPagado() {
@@ -291,11 +345,15 @@ function closePagoModal() {
   historialPago.value  = null
   pagoError.value      = ''
   codigoCopied.value   = false
+  barcodeCopied.value  = false
+  barcodeCopied2.value = false
   pagoFile.value       = null
   pagoPreview.value    = ''
 }
 
-const codigoCopied = ref(false)
+const codigoCopied   = ref(false)
+const barcodeCopied  = ref(false)
+const barcodeCopied2 = ref(false)
 
 function copiarCodigo() {
   const codigo = pagoEncargo.value?.codigoRecibo
@@ -303,6 +361,22 @@ function copiarCodigo() {
   navigator.clipboard.writeText(codigo).then(() => {
     codigoCopied.value = true
     setTimeout(() => { codigoCopied.value = false }, 2500)
+  })
+}
+
+function copiarBarcode() {
+  if (!pagoBarcode.value) return
+  navigator.clipboard.writeText(pagoBarcode.value).then(() => {
+    barcodeCopied.value = true
+    setTimeout(() => { barcodeCopied.value = false }, 2500)
+  })
+}
+
+function copiarBarcode2() {
+  if (!pagoBarcode2.value) return
+  navigator.clipboard.writeText(pagoBarcode2.value).then(() => {
+    barcodeCopied2.value = true
+    setTimeout(() => { barcodeCopied2.value = false }, 2500)
   })
 }
 
@@ -1019,9 +1093,41 @@ const pages = computed(() => {
               </template>
             </div>
 
+            <!-- Código de barras EPM -->
+            <div v-if="pagoBarcode" class="flex flex-col gap-2">
+              <div class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
+                <div>
+                  <p class="text-xs text-slate-400">Código de barras</p>
+                  <p class="text-sm font-mono font-bold text-slate-800 mt-0.5 select-all break-all">{{ pagoBarcode }}</p>
+                </div>
+                <button
+                  type="button"
+                  @click="copiarBarcode"
+                  class="text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ml-3 transition"
+                  :class="barcodeCopied ? 'bg-success-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
+                >
+                  {{ barcodeCopied ? '¡Copiado!' : 'Copiar' }}
+                </button>
+              </div>
+              <div v-if="pagoBarcode2" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
+                <div>
+                  <p class="text-xs text-slate-400">Código de barras <span class="text-slate-400">(Opción 2)</span></p>
+                  <p class="text-sm font-mono font-bold text-slate-800 mt-0.5 select-all break-all">{{ pagoBarcode2 }}</p>
+                </div>
+                <button
+                  type="button"
+                  @click="copiarBarcode2"
+                  class="text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ml-3 transition"
+                  :class="barcodeCopied2 ? 'bg-success-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
+                >
+                  {{ barcodeCopied2 ? '¡Copiado!' : 'Copiar' }}
+                </button>
+              </div>
+            </div>
+
             <!-- Link de pago de la empresa -->
             <div v-if="pagoEncargo.empresa_servicio?.link" class="flex flex-col gap-2">
-              <div v-if="pagoEncargo.codigoRecibo" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
+              <div v-if="pagoEncargo.codigoRecibo && !pagoBarcode" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
                 <div>
                   <p class="text-xs text-slate-400">Código a pegar en la plataforma</p>
                   <p class="text-sm font-mono font-bold text-slate-800 mt-0.5">{{ pagoEncargo.codigoRecibo }}</p>
@@ -1040,7 +1146,7 @@ const pages = computed(() => {
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                {{ codigoCopied ? '¡Código copiado! Abriendo...' : `Ir a pagar en ${pagoEncargo.empresa_servicio.nombre}` }}
+                {{ codigoCopied ? '¡Código copiado!' : `Ir a pagar en ${pagoEncargo.empresa_servicio.nombre}` }}
               </a>
             </div>
 
@@ -1052,7 +1158,19 @@ const pages = computed(() => {
               </div>
               <div v-if="pagoEncargo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
                 <span class="text-xs text-slate-400">Código / N° cuenta</span>
-                <span class="text-sm font-mono text-slate-700">{{ pagoEncargo.codigoRecibo }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-mono text-slate-700">{{ pagoEncargo.codigoRecibo }}</span>
+                  <button
+                    type="button"
+                    @click="copiarCodigo"
+                    class="p-1 rounded-md transition"
+                    :class="codigoCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                    title="Copiar código"
+                  >
+                    <CheckCircle v-if="codigoCopied" class="w-3.5 h-3.5" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <div v-if="pagoEncargo.cliente" class="flex items-center justify-between px-4 py-3">
                 <span class="text-xs text-slate-400">Cliente</span>
@@ -1264,16 +1382,50 @@ const pages = computed(() => {
                 </div>
                 <div v-if="confirmRecibo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
                   <span class="text-xs text-slate-400">Código</span>
-                  <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.codigoRecibo }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-mono text-slate-700">{{ confirmRecibo.codigoRecibo }}</span>
+                    <button
+                      type="button"
+                      @click="copiarConfirmCodigo"
+                      class="p-1 rounded-md transition"
+                      :class="confirmCodigoCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                      title="Copiar código"
+                    >
+                      <CheckCircle v-if="confirmCodigoCopied" class="w-3.5 h-3.5" />
+                      <Copy v-else class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div v-if="confirmBarcode" class="px-4 py-3">
-                  <span class="text-xs text-slate-400 block mb-2">Código de barras (pago EPM)</span>
-                  <div class="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-col items-center gap-1.5">
-                    <div
-                      class="w-full h-9"
-                      style="background-image: repeating-linear-gradient(90deg, #1e293b 0 2px, transparent 2px 4px, #1e293b 4px 5px, transparent 5px 8px); background-size: 100% 100%;"
-                    />
-                    <span class="text-xs font-mono tracking-wider text-slate-700 break-all text-center">{{ confirmBarcode }}</span>
+                <div v-if="confirmBarcode" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Código de barras</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-mono text-slate-700 break-all text-right">{{ confirmBarcode }}</span>
+                    <button
+                      type="button"
+                      @click="copiarConfirmBarcode"
+                      class="p-1 rounded-md transition shrink-0"
+                      :class="confirmBarcodeCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                      title="Copiar código de barras"
+                    >
+                      <CheckCircle v-if="confirmBarcodeCopied" class="w-3.5 h-3.5" />
+                      <Copy v-else class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div v-if="confirmBarcode2" class="flex items-center justify-between px-4 py-3">
+                  <span class="text-xs text-slate-400">Código de barras <span class="text-slate-300">(Opción 2)</span></span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-mono text-slate-700 break-all text-right">{{ confirmBarcode2 }}</span>
+                    <button
+                      type="button"
+                      @click="copiarConfirmBarcode2"
+                      class="p-1 rounded-md transition shrink-0"
+                      :class="confirmBarcodeCopied2 ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                      title="Copiar código de barras (Opción 2)"
+                    >
+                      <CheckCircle v-if="confirmBarcodeCopied2" class="w-3.5 h-3.5" />
+                      <Copy v-else class="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
                 <div v-if="confirmRecibo.tipo_factura" class="flex items-center justify-between px-4 py-3">
