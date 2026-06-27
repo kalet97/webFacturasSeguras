@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info, CheckCircle } from 'lucide-vue-next'
+import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info, CheckCircle, BookOpen, X } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -17,10 +17,16 @@ interface EmpresaOption {
   nombre: string
   color: string | null
   idTipoFactura: number | null
+  urlTutorial: string | null
 }
 
 const empresas        = ref<EmpresaOption[]>([])
 const loadingCatalogos = ref(true)
+const showTutorialModal = ref(false)
+
+const selectedEmpresa = computed(() =>
+  empresas.value.find(e => e.id === Number(form.value.idEmpresaServicio)) ?? null
+)
 
 const form = ref({
   idEmpresaServicio: '',
@@ -75,11 +81,11 @@ watch(() => form.value.fechaMaxima, (nueva) => {
 
 onMounted(async () => {
   try {
-    const data = await api.get<{ idEmpresaServicio: number; nombre: string; color: string | null; idTipoFactura: number | null }[]>(
+    const data = await api.get<{ idEmpresaServicio: number; nombre: string; color: string | null; idTipoFactura: number | null; urlTutorial: string | null }[]>(
       '/empresas-servicios',
       auth.token,
     )
-    empresas.value = data.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color, idTipoFactura: x.idTipoFactura }))
+    empresas.value = data.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color, idTipoFactura: x.idTipoFactura, urlTutorial: x.urlTutorial ?? null }))
   } finally {
     loadingCatalogos.value = false
   }
@@ -149,6 +155,17 @@ async function handleSave() {
                 <option v-for="e in empresas" :key="e.id" :value="e.id">{{ e.nombre }}</option>
               </select>
             </div>
+            <Transition name="fade-quick">
+              <button
+                v-if="selectedEmpresa?.urlTutorial"
+                type="button"
+                @click="showTutorialModal = true"
+                class="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 active:bg-primary-200 border border-primary-100 rounded-xl px-3 py-1.5 transition-colors"
+              >
+                <BookOpen class="w-3.5 h-3.5" />
+                ¿Dónde encuentro mis datos? Ver demo
+              </button>
+            </Transition>
           </div>
 
           <div class="h-px bg-slate-100" />
@@ -259,6 +276,42 @@ async function handleSave() {
       </template>
     </div>
 
+  <!-- Modal tutorial -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showTutorialModal" class="fixed inset-0 z-[100] flex items-end justify-center" @click.self="showTutorialModal = false">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showTutorialModal = false" />
+        <div class="relative w-full max-w-[390px] bg-white rounded-t-3xl shadow-2xl flex flex-col" style="max-height: 88dvh">
+          <!-- Handle + header -->
+          <div class="flex-shrink-0 px-5 pt-4 pb-3">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 font-medium uppercase tracking-wide">Tutorial</p>
+                <h3 class="text-base font-bold text-slate-800 leading-tight">{{ selectedEmpresa?.nombre }}</h3>
+              </div>
+              <button
+                @click="showTutorialModal = false"
+                class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 active:bg-slate-300 transition-colors"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-1.5">Aquí puedes ver dónde encontrar los datos de tu factura</p>
+          </div>
+          <!-- Imagen scrollable -->
+          <div class="flex-1 overflow-y-auto px-5 pb-6">
+            <img
+              :src="selectedEmpresa?.urlTutorial ?? ''"
+              :alt="`Tutorial ${selectedEmpresa?.nombre}`"
+              class="w-full rounded-2xl border border-slate-100 object-contain"
+            />
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
   <!-- Modal éxito -->
   <Teleport to="body">
     <Transition name="modal">
@@ -293,4 +346,7 @@ async function handleSave() {
 .modal-enter-active .relative, .modal-leave-active .relative { transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1); }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
 .modal-enter-from .relative { transform: translateY(100%); }
+
+.fade-quick-enter-active, .fade-quick-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.fade-quick-enter-from, .fade-quick-leave-to { opacity: 0; transform: translateY(-4px); }
 </style>
