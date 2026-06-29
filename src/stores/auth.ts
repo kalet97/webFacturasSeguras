@@ -77,6 +77,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout(): Promise<void> {
     await api.post('/auth/logout', {}, token.value).catch(() => {})
+    clearSession()
+  }
+
+  function clearSession(): void {
     token.value = null
     user.value  = null
     localStorage.removeItem(TOKEN_KEY)
@@ -139,5 +143,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(user.value))
   }
 
-  return { user, token, isAuthenticated, isAdmin, login, logout, restoreSession, register, updateProfile, refreshUser }
+  return { user, token, isAuthenticated, isAdmin, login, logout, clearSession, restoreSession, register, updateProfile, refreshUser }
 })

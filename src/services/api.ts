@@ -16,6 +16,9 @@ async function request<T>(
   const res = await fetch(`${BASE_URL}/api${path}`, { ...options, headers })
 
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      window.dispatchEvent(new CustomEvent('api:unauthorized'))
+    }
     const body = await res.json().catch(() => ({}))
     throw new Error(body.message || `Error ${res.status}`)
   }
@@ -28,6 +31,9 @@ async function uploadFile<T>(path: string, formData: FormData, token?: string | 
   if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(`${BASE_URL}/api${path}`, { method: 'POST', headers, body: formData })
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      window.dispatchEvent(new CustomEvent('api:unauthorized'))
+    }
     const body = await res.json().catch(() => ({}))
     throw new Error(body.message || `Error ${res.status}`)
   }

@@ -19,4 +19,19 @@ auth.restoreSession()
 const adminAuth = useAdminAuthStore()
 adminAuth.restoreSession()
 
+let redirectingToLogin = false
+window.addEventListener('api:unauthorized', () => {
+  if (redirectingToLogin) return
+  redirectingToLogin = true
+  setTimeout(() => { redirectingToLogin = false }, 1000)
+
+  if (adminAuth.token) {
+    adminAuth.clearSession()
+    router.push('/admin/login')
+  } else {
+    auth.clearSession()
+    router.push('/login')
+  }
+})
+
 app.mount('#app')

@@ -37,6 +37,10 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
 
   async function logout(): Promise<void> {
     await api.post('/auth/admin/logout', {}, token.value).catch(() => {})
+    clearSession()
+  }
+
+  function clearSession(): void {
     token.value = null
     user.value  = null
     localStorage.removeItem(TOKEN_KEY)
@@ -57,5 +61,5 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
     }
   }
 
-  return { user, token, isAuthenticated, login, logout, restoreSession }
+  return { user, token, isAuthenticated, login, logout, clearSession, restoreSession }
 })
