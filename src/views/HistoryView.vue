@@ -1,45 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Phone, MessageSquare, CreditCard, MapPin } from 'lucide-vue-next'
-import { useRecibosStore, type HistoryItem } from '@/stores/recibos'
+import { onMounted } from 'vue'
+import { ArrowUpFromLine, Clock } from 'lucide-vue-next'
+import { useRecibosStore } from '@/stores/recibos'
 import AppHeader from '@/components/AppHeader.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
 
 const store = useRecibosStore()
 
 onMounted(() => store.fetchHistory())
-
-type TabKey = 'all' | 'call' | 'reminder' | 'payment' | 'visit'
-
-const activeTab = ref<TabKey>('all')
-
-const tabs: { key: TabKey; label: string; icon: typeof Phone }[] = [
-  { key: 'all', label: 'Todo', icon: MessageSquare },
-  { key: 'call', label: 'Llamadas', icon: Phone },
-  { key: 'reminder', label: 'Recordatorios', icon: MessageSquare },
-  { key: 'payment', label: 'Pagos', icon: CreditCard },
-  { key: 'visit', label: 'Visitas', icon: MapPin },
-]
-
-const filtered = computed<HistoryItem[]>(() =>
-  activeTab.value === 'all'
-    ? store.history
-    : store.history.filter(i => i.type === activeTab.value)
-)
-
-const iconMap = {
-  call: { icon: Phone, bg: 'bg-success-50', color: 'text-success' },
-  reminder: { icon: MessageSquare, bg: 'bg-primary-50', color: 'text-primary-600' },
-  payment: { icon: CreditCard, bg: 'bg-warning-50', color: 'text-warning-600' },
-  visit: { icon: MapPin, bg: 'bg-purple-50', color: 'text-purple-600' },
-}
-
-const typeLabel = {
-  call: 'Llamada',
-  reminder: 'Recordatorio',
-  payment: 'Pago',
-  visit: 'Visita',
-}
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -54,66 +22,59 @@ function formatCurrency(v: number) {
   <div class="screen pb-24">
     <AppHeader title="Historial" :show-back="false" :show-notification="true" />
 
-    <div class="overflow-x-auto scrollbar-hide px-4 py-3">
-      <div class="flex gap-2 w-max">
-        <button
-          v-for="tab in tabs"
-          :key="tab.key"
-          @click="activeTab = tab.key"
-          :class="[
-            'px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 whitespace-nowrap',
-            activeTab === tab.key
-              ? 'bg-primary-600 text-white shadow-sm'
-              : 'bg-white text-slate-600 border border-slate-200',
-          ]"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
-    </div>
-
-    <div class="flex-1 overflow-y-auto px-4 pb-4">
+    <div class="flex-1 overflow-y-auto px-4 pb-4 pt-3">
       <div v-if="store.loadingHistory" class="flex justify-center mt-12">
         <div class="w-7 h-7 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
       </div>
 
-      <div v-else-if="filtered.length === 0" class="card mt-4 text-center py-12">
-        <p class="text-3xl mb-3">📋</p>
-        <p class="font-semibold text-slate-700">Sin registros</p>
-        <p class="text-sm text-slate-500 mt-1">No hay actividad en esta categoría</p>
+      <div v-else-if="store.history.length === 0" class="card mt-4 text-center py-12">
+        <p class="text-3xl mb-3">🧾</p>
+        <p class="font-semibold text-slate-700">Sin pagos registrados</p>
+        <p class="text-sm text-slate-500 mt-1">Aquí verás el historial de pagos de tus facturas</p>
       </div>
 
-      <div v-if="!store.loadingHistory" class="space-y-3 mt-1">
-        <div
-          v-for="item in filtered"
-          :key="item.id"
-          class="card flex items-center gap-3"
-        >
-          <div :class="['w-11 h-11 rounded-xl flex items-center justify-center shrink-0', iconMap[item.type].bg]">
-            <component :is="iconMap[item.type].icon" :class="['w-5 h-5', iconMap[item.type].color]" />
-          </div>
-
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-sm font-semibold text-slate-800 truncate">{{ item.reciboName }}</p>
-              <span
-                v-if="item.amount"
-                class="text-sm font-bold text-success shrink-0"
-              >{{ formatCurrency(item.amount) }}</span>
-            </div>
-            <p class="text-xs text-slate-500 mt-0.5">{{ item.description }}</p>
-            <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(item.date) }}</p>
-          </div>
-
-          <span
-            :class="[
-              'shrink-0 text-xs font-medium px-2 py-1 rounded-lg',
-              iconMap[item.type].bg,
-              iconMap[item.type].color,
-            ]"
+      <div v-if="!store.loadingHistory && store.history.length > 0" class="card">
+        <div class="flex flex-col gap-4">
+          <div
+            v-for="(item, i) in store.history"
+            :key="item.id"
+            class="flex gap-3 relative"
           >
-            {{ typeLabel[item.type] }}
-          </span>
+            <div class="flex flex-col items-center shrink-0">
+              <div :class="['w-9 h-9 rounded-xl flex items-center justify-center shrink-0', item.pagado ? 'bg-success-50' : 'bg-violet-50']">
+                <component :is="item.pagado ? ArrowUpFromLine : Clock" :class="['w-4 h-4', item.pagado ? 'text-success' : 'text-violet-500']" />
+              </div>
+              <div v-if="i < store.history.length - 1" class="w-px flex-1 bg-slate-100 mt-1 min-h-[16px]" />
+            </div>
+
+            <div class="flex-1 pb-1">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-slate-800 truncate">{{ item.reciboName }}</p>
+                <span :class="['shrink-0 text-xs font-medium px-2 py-0.5 rounded-full', item.pagado ? 'bg-success-50 text-success-600' : 'bg-violet-50 text-violet-600']">
+                  {{ item.pagado ? 'Completado' : 'En trámite' }}
+                </span>
+              </div>
+
+              <div class="mt-1.5 bg-slate-50 rounded-xl px-3 py-2 space-y-1">
+                <div class="flex justify-between text-xs">
+                  <span class="text-slate-400">Valor recibo</span>
+                  <span class="font-medium text-slate-700">{{ formatCurrency(item.valorRecibo) }}</span>
+                </div>
+                <template v-if="item.comision">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-slate-400">Comisión</span>
+                    <span class="font-medium text-slate-700">{{ formatCurrency(item.comision) }}</span>
+                  </div>
+                  <div class="flex justify-between text-xs border-t border-slate-100 pt-1">
+                    <span class="text-slate-500 font-medium">Total</span>
+                    <span class="font-bold text-slate-800">{{ formatCurrency(item.valorTotal) }}</span>
+                  </div>
+                </template>
+              </div>
+
+              <p v-if="item.date" class="text-xs text-slate-400 mt-1.5">{{ formatDate(item.date) }}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

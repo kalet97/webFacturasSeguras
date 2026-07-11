@@ -3,8 +3,9 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   Search, FileText, RefreshCw, ChevronLeft, ChevronRight,
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
-  Building2, Calendar, Hash, MessageCircle, CheckCircle, Bell,
+  Building2, Calendar, Hash, MessageCircle, CheckCircle,
   Banknote, ImageOff, ArrowLeftRight, ImagePlus, History, Copy,
+  FileEdit, CalendarPlus,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -33,14 +34,6 @@ interface Recibo {
 
 interface Paginator {
   data: Recibo[]; current_page: number; last_page: number; total: number; per_page: number
-}
-
-interface TipoNotificacion {
-  idTipoNotificacion: number
-  nombre: string
-  precio: number | null
-  color: string | null
-  requiereCobro: number
 }
 
 interface HistorialPagoRecibo {
@@ -111,58 +104,6 @@ async function uploadComprobante(file: File): Promise<string> {
   return res.url
 }
 
-// --- Parámetros EPM (código de barras: indicativoEPM + código + consecutivoEPM) ---
-const epmIndicativo  = ref<string | null>(null)
-const epmConsecutivo = ref<string | null>(null)
-
-async function fetchParametrosEPM() {
-  try {
-    const [indicativo, consecutivo] = await Promise.all([
-      api.get<{ valor: string }>('/parametros-generales/indicativoEPM',  adminAuth.token),
-      api.get<{ valor: string }>('/parametros-generales/consecutivoEPM', adminAuth.token),
-    ])
-    epmIndicativo.value  = indicativo?.valor  ?? null
-    epmConsecutivo.value = consecutivo?.valor ?? null
-  } catch {}
-}
-
-function isEmpresaEPM(r: Recibo | null) {
-  return r?.empresa_servicio?.idEmpresaServicio === 1
-}
-
-function buildBarcode(codigoRecibo: string | null) {
-  if (!codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
-  return `${epmIndicativo.value}${codigoRecibo}${epmConsecutivo.value}`
-}
-
-const confirmBarcode = computed(() => {
-  if (!confirmRecibo.value || !isEmpresaEPM(confirmRecibo.value)) return null
-  return buildBarcode(confirmRecibo.value.codigoRecibo)
-})
-
-const confirmBarcode2 = computed(() => {
-  if (!confirmRecibo.value || !isEmpresaEPM(confirmRecibo.value)) return null
-  if (!confirmRecibo.value.codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
-  const num = parseInt(epmConsecutivo.value, 10)
-  if (isNaN(num) || num <= 0) return null
-  const consecutivoMenos1 = String(num - 1).padStart(epmConsecutivo.value.length, '0')
-  return `${epmIndicativo.value}${confirmRecibo.value.codigoRecibo}${consecutivoMenos1}`
-})
-
-const pagoBarcode = computed(() => {
-  if (!pagoEncargo.value || !isEmpresaEPM(pagoEncargo.value)) return null
-  return buildBarcode(pagoEncargo.value.codigoRecibo)
-})
-
-const pagoBarcode2 = computed(() => {
-  if (!pagoEncargo.value || !isEmpresaEPM(pagoEncargo.value)) return null
-  if (!pagoEncargo.value.codigoRecibo || !epmIndicativo.value || !epmConsecutivo.value) return null
-  const num = parseInt(epmConsecutivo.value, 10)
-  if (isNaN(num) || num <= 0) return null
-  const consecutivoMenos1 = String(num - 1).padStart(epmConsecutivo.value.length, '0')
-  return `${epmIndicativo.value}${pagoEncargo.value.codigoRecibo}${consecutivoMenos1}`
-})
-
 // --- Confirmación marcar como pagado ---
 const confirmRecibo        = ref<Recibo | null>(null)
 const showConfirm          = ref(false)
@@ -171,8 +112,6 @@ const confirmError         = ref('')
 const confirmFile          = ref<File | null>(null)
 const confirmPreview       = ref('')
 const confirmCodigoCopied  = ref(false)
-const confirmBarcodeCopied  = ref(false)
-const confirmBarcodeCopied2 = ref(false)
 
 function copiarConfirmCodigo() {
   const codigo = confirmRecibo.value?.codigoRecibo
@@ -180,20 +119,6 @@ function copiarConfirmCodigo() {
   navigator.clipboard.writeText(codigo).then(() => {
     confirmCodigoCopied.value = true
     setTimeout(() => { confirmCodigoCopied.value = false }, 2500)
-  })
-}
-function copiarConfirmBarcode() {
-  if (!confirmBarcode.value) return
-  navigator.clipboard.writeText(confirmBarcode.value).then(() => {
-    confirmBarcodeCopied.value = true
-    setTimeout(() => { confirmBarcodeCopied.value = false }, 2500)
-  })
-}
-function copiarConfirmBarcode2() {
-  if (!confirmBarcode2.value) return
-  navigator.clipboard.writeText(confirmBarcode2.value).then(() => {
-    confirmBarcodeCopied2.value = true
-    setTimeout(() => { confirmBarcodeCopied2.value = false }, 2500)
   })
 }
 
@@ -219,8 +144,6 @@ function closeConfirm() {
   confirmFile.value           = null
   confirmPreview.value        = ''
   confirmCodigoCopied.value   = false
-  confirmBarcodeCopied.value  = false
-  confirmBarcodeCopied2.value = false
 }
 
 async function markAsPagado() {
@@ -303,6 +226,108 @@ async function cambiarEstado() {
   }
 }
 
+// --- Modal actualizar factura (estado consultarFactura) ---
+const actualizarRecibo       = ref<Recibo | null>(null)
+const showActualizarModal    = ref(false)
+const actualizarLoading      = ref(false)
+const actualizarError        = ref('')
+const actualizarPrecio        = ref<number | null>(null)
+const actualizarPrecioDisplay = ref('')
+const actualizarFechaMaxima   = ref('')
+const actualizarCodigoCopied  = ref(false)
+const actualizarPrecioOriginal      = ref<number | null>(null)
+const actualizarFechaMaximaOriginal = ref('')
+
+const actualizarSinCambios = computed(() => {
+  return actualizarPrecio.value === actualizarPrecioOriginal.value
+    || actualizarFechaMaxima.value === actualizarFechaMaximaOriginal.value
+})
+
+function formatMiles(valor: number | null): string {
+  if (valor === null || isNaN(valor)) return ''
+  return new Intl.NumberFormat('es-CO').format(valor)
+}
+
+function onActualizarPrecioInput(e: Event) {
+  const digitos = (e.target as HTMLInputElement).value.replace(/\D/g, '')
+  actualizarPrecio.value        = digitos ? Number(digitos) : null
+  actualizarPrecioDisplay.value = formatMiles(actualizarPrecio.value)
+}
+
+function openActualizarModal(r: Recibo) {
+  actualizarRecibo.value       = r
+  actualizarPrecio.value       = r.precio
+  actualizarPrecioDisplay.value = formatMiles(r.precio)
+  actualizarFechaMaxima.value  = r.fechaMaxima ? r.fechaMaxima.slice(0, 10) : ''
+  actualizarError.value        = ''
+  actualizarCodigoCopied.value = false
+  actualizarPrecioOriginal.value      = r.precio
+  actualizarFechaMaximaOriginal.value = actualizarFechaMaxima.value
+  showActualizarModal.value    = true
+}
+
+function closeActualizarModal() {
+  showActualizarModal.value    = false
+  actualizarRecibo.value       = null
+  actualizarError.value        = ''
+  actualizarCodigoCopied.value = false
+}
+
+function copiarCodigoActualizar() {
+  const codigo = actualizarRecibo.value?.codigoRecibo
+  if (!codigo) return
+  navigator.clipboard.writeText(codigo).then(() => {
+    actualizarCodigoCopied.value = true
+    setTimeout(() => { actualizarCodigoCopied.value = false }, 2500)
+  })
+}
+
+function sumarMesActualizar() {
+  const base = actualizarFechaMaxima.value ? new Date(`${actualizarFechaMaxima.value}T00:00:00`) : new Date()
+  base.setMonth(base.getMonth() + 1)
+  actualizarFechaMaxima.value = base.toISOString().slice(0, 10)
+}
+
+async function guardarActualizarFactura() {
+  if (!actualizarRecibo.value) return
+  if (actualizarSinCambios.value) {
+    actualizarError.value = 'Debes modificar tanto el valor como la fecha límite de pago antes de guardar.'
+    return
+  }
+  actualizarLoading.value = true
+  actualizarError.value   = ''
+  try {
+    const ESTADO_PENDIENTE = 1
+    await api.put(`/recibos/${actualizarRecibo.value.idRecibo}`, {
+      precio:          actualizarPrecio.value,
+      fechaMaxima:     actualizarFechaMaxima.value || null,
+      idEstadoRecibo:  ESTADO_PENDIENTE,
+      idUsuario:       adminAuth.user?.idUsuario ?? null,
+    }, adminAuth.token)
+
+    const nuevoEstado = estados.value.find(e => e.idEstadoRecibo === ESTADO_PENDIENTE) ?? null
+    const idx = recibos.value.findIndex(r => r.idRecibo === actualizarRecibo.value!.idRecibo)
+    if (idx !== -1) {
+      recibos.value[idx] = {
+        ...recibos.value[idx],
+        precio:       actualizarPrecio.value,
+        fechaMaxima:  actualizarFechaMaxima.value || null,
+        estado_recibo: nuevoEstado,
+      }
+    }
+    if (selected.value?.idRecibo === actualizarRecibo.value.idRecibo) {
+      selected.value = { ...selected.value, precio: actualizarPrecio.value, fechaMaxima: actualizarFechaMaxima.value || null, estado_recibo: nuevoEstado }
+    }
+
+    closeActualizarModal()
+    fetchContadores()
+  } catch (e: unknown) {
+    actualizarError.value = e instanceof Error ? e.message : 'Error al actualizar la factura'
+  } finally {
+    actualizarLoading.value = false
+  }
+}
+
 // --- Modal pago por encargo (estado 4) ---
 const pagoEncargo       = ref<Recibo | null>(null)
 const showPagoModal     = ref(false)
@@ -345,8 +370,6 @@ function closePagoModal() {
   historialPago.value  = null
   pagoError.value      = ''
   codigoCopied.value   = false
-  barcodeCopied.value  = false
-  barcodeCopied2.value = false
   telefonoCopied.value = false
   correoCopied.value   = false
   pagoFile.value       = null
@@ -354,8 +377,6 @@ function closePagoModal() {
 }
 
 const codigoCopied   = ref(false)
-const barcodeCopied  = ref(false)
-const barcodeCopied2 = ref(false)
 const telefonoCopied = ref(false)
 const correoCopied   = ref(false)
 
@@ -398,22 +419,6 @@ function copiarCorreo() {
   })
 }
 
-function copiarBarcode() {
-  if (!pagoBarcode.value) return
-  navigator.clipboard.writeText(pagoBarcode.value).then(() => {
-    barcodeCopied.value = true
-    setTimeout(() => { barcodeCopied.value = false }, 2500)
-  })
-}
-
-function copiarBarcode2() {
-  if (!pagoBarcode2.value) return
-  navigator.clipboard.writeText(pagoBarcode2.value).then(() => {
-    barcodeCopied2.value = true
-    setTimeout(() => { barcodeCopied2.value = false }, 2500)
-  })
-}
-
 async function confirmarPagoEncargo() {
   if (!pagoEncargo.value) return
   pagoLoading.value = true
@@ -450,70 +455,6 @@ async function confirmarPagoEncargo() {
     pagoError.value = e instanceof Error ? e.message : 'Error al confirmar el pago'
   } finally {
     pagoLoading.value = false
-  }
-}
-
-// --- Tipos de notificación ---
-const tiposNotificacion = ref<TipoNotificacion[]>([])
-
-async function fetchTiposNotificacion() {
-  try { tiposNotificacion.value = await api.get<TipoNotificacion[]>('/tipo-notificaciones', adminAuth.token) } catch {}
-}
-
-// --- Modal cobro notificación ---
-const notifRecibo      = ref<Recibo | null>(null)
-const showNotifModal   = ref(false)
-const notifLoading     = ref(false)
-const notifError       = ref('')
-const selectedTipo     = ref<TipoNotificacion | null>(null)
-const notifObservacion = ref('')
-
-function openNotifModal(r: Recibo) {
-  notifRecibo.value      = r
-  selectedTipo.value     = null
-  notifObservacion.value = ''
-  notifError.value       = ''
-  showNotifModal.value   = true
-}
-
-function closeNotifModal() {
-  showNotifModal.value = false
-  notifRecibo.value    = null
-  notifError.value     = ''
-}
-
-async function registrarNotificacion() {
-  if (!notifRecibo.value || !selectedTipo.value || !adminAuth.user) return
-  notifLoading.value = true
-  notifError.value   = ''
-  try {
-    const notif = await api.post<{ idHistorialNotificacion: number }>(
-      '/historial-notificaciones',
-      {
-        idCliente:          notifRecibo.value.cliente!.idCliente,
-        idUsuario:          adminAuth.user.idUsuario,
-        idRecibo:           notifRecibo.value.idRecibo,
-        idTipoNotificacion: selectedTipo.value.idTipoNotificacion,
-        observacion:        notifObservacion.value.trim() || null,
-      },
-      adminAuth.token,
-    )
-    if (selectedTipo.value.requiereCobro) {
-      await api.post(
-        '/historial-pago-notificaciones',
-        {
-          idCliente:               notifRecibo.value.cliente!.idCliente,
-          idHistorialNotificacion: notif.idHistorialNotificacion,
-          precio:                  selectedTipo.value.precio,
-        },
-        adminAuth.token,
-      )
-    }
-    closeNotifModal()
-  } catch (e: unknown) {
-    notifError.value = e instanceof Error ? e.message : 'Error al registrar la notificación'
-  } finally {
-    notifLoading.value = false
   }
 }
 
@@ -603,8 +544,6 @@ function handlePaste(e: ClipboardEvent) {
 onMounted(async () => {
   await fetchEstados()
   fetchContadores()
-  fetchTiposNotificacion()
-  fetchParametrosEPM()
   fetchRecibos()
   document.addEventListener('paste', handlePaste)
 })
@@ -681,9 +620,14 @@ function isPendienteRevisar(r: Recibo) {
   return r.estado_recibo?.idEstadoRecibo === 5
 }
 
+function isConsultarFactura(r: Recibo) {
+  return r.estado_recibo?.idEstadoRecibo === 7
+}
+
 function statusClass(r: Recibo) {
   if (isPagoEncargo(r)) return 'bg-orange-100 text-orange-700 ring-2 ring-orange-400 ring-offset-1 font-semibold'
   if (isPendienteRevisar(r)) return 'bg-amber-100 text-amber-700 ring-2 ring-amber-400 ring-offset-1 font-semibold'
+  if (isConsultarFactura(r)) return 'bg-primary-100 text-primary-700 ring-2 ring-primary-400 ring-offset-1 font-semibold'
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return 'bg-success-50 text-success-600'
   const days = daysLeft(r.fechaMaxima)
@@ -696,6 +640,7 @@ function statusClass(r: Recibo) {
 function statusLabel(r: Recibo) {
   if (isPagoEncargo(r)) return '💰 ' + (r.estado_recibo?.nombre ?? 'Pago por encargo')
   if (isPendienteRevisar(r)) return '🔎 ' + (r.estado_recibo?.nombre ?? 'Pendiente por revisar')
+  if (isConsultarFactura(r)) return '📄 ' + (r.estado_recibo?.nombre ?? 'Consultar factura')
   const nombre = (r.estado_recibo?.nombre ?? '').toLowerCase()
   if (['pagado', 'pago', 'paid', 'cancelado'].some(p => nombre.includes(p))) return r.estado_recibo?.nombre ?? 'Pagado'
   const days = daysLeft(r.fechaMaxima)
@@ -837,6 +782,8 @@ const pages = computed(() => {
                     ? 'bg-orange-50 hover:bg-orange-100 border-l-4 border-orange-400'
                     : isPendienteRevisar(recibo)
                     ? 'bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400'
+                    : isConsultarFactura(recibo)
+                    ? 'bg-primary-50 hover:bg-primary-100 border-l-4 border-primary-400'
                     : 'hover:bg-slate-50',
                 ]"
               >
@@ -921,6 +868,8 @@ const pages = computed(() => {
                       ? 'bg-orange-50 group-hover:bg-orange-100'
                       : isPendienteRevisar(recibo)
                       ? 'bg-amber-50 group-hover:bg-amber-100'
+                      : isConsultarFactura(recibo)
+                      ? 'bg-primary-50 group-hover:bg-primary-100'
                       : 'bg-white group-hover:bg-slate-50',
                   ]"
                 >
@@ -947,12 +896,12 @@ const pages = computed(() => {
                       <CheckCircle class="w-4 h-4" />
                     </button>
                     <button
-                      v-if="recibo.cliente"
-                      @click="openNotifModal(recibo)"
-                      class="text-slate-400 hover:text-warning-600 transition p-1.5 rounded-lg hover:bg-warning-50"
-                      title="Registrar notificación"
+                      v-if="isConsultarFactura(recibo)"
+                      @click="openActualizarModal(recibo)"
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition shadow-sm animate-pulse hover:animate-none"
+                      title="Actualizar factura"
                     >
-                      <Bell class="w-4 h-4" />
+                      <FileEdit class="w-3.5 h-3.5" /> Actualizar
                     </button>
                     <button
                       @click="openEstadoModal(recibo)"
@@ -1150,41 +1099,9 @@ const pages = computed(() => {
               </template>
             </div>
 
-            <!-- Código de barras EPM -->
-            <div v-if="pagoBarcode" class="flex flex-col gap-2">
-              <div class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
-                <div>
-                  <p class="text-xs text-slate-400">Código de barras</p>
-                  <p class="text-sm font-mono font-bold text-slate-800 mt-0.5 select-all break-all">{{ pagoBarcode }}</p>
-                </div>
-                <button
-                  type="button"
-                  @click="copiarBarcode"
-                  class="text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ml-3 transition"
-                  :class="barcodeCopied ? 'bg-success-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
-                >
-                  {{ barcodeCopied ? '¡Copiado!' : 'Copiar' }}
-                </button>
-              </div>
-              <div v-if="pagoBarcode2" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
-                <div>
-                  <p class="text-xs text-slate-400">Código de barras <span class="text-slate-400">(Opción 2)</span></p>
-                  <p class="text-sm font-mono font-bold text-slate-800 mt-0.5 select-all break-all">{{ pagoBarcode2 }}</p>
-                </div>
-                <button
-                  type="button"
-                  @click="copiarBarcode2"
-                  class="text-xs font-semibold px-2.5 py-1 rounded-lg shrink-0 ml-3 transition"
-                  :class="barcodeCopied2 ? 'bg-success-600 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'"
-                >
-                  {{ barcodeCopied2 ? '¡Copiado!' : 'Copiar' }}
-                </button>
-              </div>
-            </div>
-
             <!-- Link de pago de la empresa -->
             <div v-if="pagoEncargo.empresa_servicio?.link" class="flex flex-col gap-2">
-              <div v-if="pagoEncargo.codigoRecibo && !pagoBarcode" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
+              <div v-if="pagoEncargo.codigoRecibo" class="flex items-center justify-between bg-slate-100 rounded-xl px-4 py-2.5">
                 <div>
                   <p class="text-xs text-slate-400">Código a pegar en la plataforma</p>
                   <p class="text-sm font-mono font-bold text-slate-800 mt-0.5">{{ pagoEncargo.codigoRecibo }}</p>
@@ -1333,86 +1250,98 @@ const pages = computed(() => {
     </Transition>
   </Teleport>
 
-  <!-- ===================== Modal cobro notificación ===================== -->
+  <!-- ===================== Modal actualizar factura (consultarFactura) ===================== -->
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showNotifModal && notifRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/50" @click="closeNotifModal" />
+      <div v-if="showActualizarModal && actualizarRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closeActualizarModal" />
         <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
 
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
             <div class="flex items-center gap-3">
-              <div class="w-9 h-9 bg-warning-50 rounded-xl flex items-center justify-center">
-                <Bell class="w-4 h-4 text-warning-600" />
+              <div class="w-9 h-9 bg-primary-50 rounded-xl flex items-center justify-center">
+                <FileEdit class="w-4 h-4 text-primary-600" />
               </div>
               <div>
-                <p class="font-semibold text-slate-800 text-sm">Registrar notificación</p>
+                <p class="font-semibold text-slate-800 text-sm">Actualizar factura</p>
                 <p class="text-xs text-slate-400">
-                  {{ notifRecibo.nombre }} &mdash; {{ notifRecibo.cliente?.nombre }} {{ notifRecibo.cliente?.apellido }}
+                  {{ actualizarRecibo.nombre }} &mdash; {{ actualizarRecibo.cliente?.nombre }} {{ actualizarRecibo.cliente?.apellido }}
                 </p>
               </div>
             </div>
-            <button @click="closeNotifModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
+            <button @click="closeActualizarModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
               <X class="w-5 h-5" />
             </button>
           </div>
 
           <!-- Body -->
-          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Selecciona el tipo de notificación</p>
-
-            <div class="space-y-2">
-              <button
-                v-for="tipo in tiposNotificacion"
-                :key="tipo.idTipoNotificacion"
-                type="button"
-                @click="selectedTipo = tipo"
-                :class="[
-                  'w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border-2 text-left transition',
-                  selectedTipo?.idTipoNotificacion === tipo.idTipoNotificacion
-                    ? 'border-warning-500 bg-warning-50'
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
-                ]"
-              >
-                <span
-                  class="w-3 h-3 rounded-full shrink-0"
-                  :style="{ backgroundColor: tipo.color ?? '#94a3b8' }"
-                />
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-semibold text-slate-800">{{ tipo.nombre }}</p>
-                  <p v-if="tipo.precio" class="text-xs text-warning-600 font-medium mt-0.5">
-                    {{ formatPrecio(tipo.precio) }}
-                  </p>
-                  <p v-else class="text-xs text-slate-400 mt-0.5">Sin costo</p>
+            <!-- Detalle de la factura -->
+            <div class="bg-slate-50 rounded-2xl divide-y divide-slate-100">
+              <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Empresa</span>
+                <span class="text-sm font-medium text-slate-700">{{ actualizarRecibo.empresa_servicio?.nombre ?? '—' }}</span>
+              </div>
+              <div v-if="actualizarRecibo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Código / N° cuenta</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-mono text-slate-700">{{ actualizarRecibo.codigoRecibo }}</span>
+                  <button
+                    type="button"
+                    @click="copiarCodigoActualizar"
+                    class="p-1 rounded-md transition"
+                    :class="actualizarCodigoCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                    title="Copiar código"
+                  >
+                    <CheckCircle v-if="actualizarCodigoCopied" class="w-3.5 h-3.5" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div
-                  v-if="selectedTipo?.idTipoNotificacion === tipo.idTipoNotificacion"
-                  class="w-5 h-5 rounded-full bg-warning-500 flex items-center justify-center shrink-0"
-                >
-                  <svg class="w-3 h-3 fill-white" viewBox="0 0 12 12">
-                    <path d="M10 3L5 8.5 2 5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                  </svg>
-                </div>
-              </button>
+              </div>
+              <div v-if="actualizarRecibo.cliente" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Cliente</span>
+                <span class="text-sm text-slate-700">{{ clienteNombre(actualizarRecibo) }}</span>
+              </div>
             </div>
 
+            <!-- Valor -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Observación <span class="normal-case font-normal text-slate-400">(opcional)</span>
-              </label>
-              <textarea
-                v-model="notifObservacion"
-                rows="3"
-                placeholder="Ej: Cliente contestó, se comprometió a pagar esta semana..."
-                class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800 placeholder-slate-400
-                       focus:outline-none focus:ring-2 focus:ring-warning-500 focus:border-transparent transition resize-none"
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Valor de la factura</label>
+              <input
+                :value="actualizarPrecioDisplay"
+                @input="onActualizarPrecioInput"
+                type="text"
+                inputmode="numeric"
+                class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800
+                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
               />
             </div>
 
-            <div v-if="notifError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
-              <AlertCircle class="w-4 h-4 shrink-0" /> {{ notifError }}
+            <!-- Fecha límite -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Fecha límite de pago</label>
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="actualizarFechaMaxima"
+                  type="date"
+                  class="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
+                />
+                <button
+                  type="button"
+                  @click="sumarMesActualizar"
+                  class="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-xl transition shrink-0"
+                  title="Sumar un mes a la fecha"
+                >
+                  <CalendarPlus class="w-3.5 h-3.5" /> +1 mes
+                </button>
+              </div>
+            </div>
+
+            <div v-if="actualizarError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> {{ actualizarError }}
             </div>
 
           </div>
@@ -1420,22 +1349,22 @@ const pages = computed(() => {
           <!-- Footer -->
           <div class="flex gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
             <button
-              @click="closeNotifModal"
-              :disabled="notifLoading"
+              @click="closeActualizarModal"
+              :disabled="actualizarLoading"
               class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-60"
             >
               Cancelar
             </button>
             <button
-              @click="registrarNotificacion"
-              :disabled="!selectedTipo || notifLoading"
-              class="flex-1 py-2.5 text-sm font-medium text-white bg-warning-600 hover:bg-warning-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+              @click="guardarActualizarFactura"
+              :disabled="actualizarLoading || actualizarSinCambios"
+              class="flex-1 py-2.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              <svg v-if="notifLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <svg v-if="actualizarLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-              {{ notifLoading ? 'Registrando...' : 'Registrar notificación' }}
+              {{ actualizarLoading ? 'Guardando...' : 'Guardar' }}
             </button>
           </div>
 
@@ -1479,38 +1408,6 @@ const pages = computed(() => {
                       title="Copiar código"
                     >
                       <CheckCircle v-if="confirmCodigoCopied" class="w-3.5 h-3.5" />
-                      <Copy v-else class="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div v-if="confirmBarcode" class="flex items-center justify-between px-4 py-3">
-                  <span class="text-xs text-slate-400">Código de barras</span>
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-mono text-slate-700 break-all text-right">{{ confirmBarcode }}</span>
-                    <button
-                      type="button"
-                      @click="copiarConfirmBarcode"
-                      class="p-1 rounded-md transition shrink-0"
-                      :class="confirmBarcodeCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
-                      title="Copiar código de barras"
-                    >
-                      <CheckCircle v-if="confirmBarcodeCopied" class="w-3.5 h-3.5" />
-                      <Copy v-else class="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div v-if="confirmBarcode2" class="flex items-center justify-between px-4 py-3">
-                  <span class="text-xs text-slate-400">Código de barras <span class="text-slate-300">(Opción 2)</span></span>
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-mono text-slate-700 break-all text-right">{{ confirmBarcode2 }}</span>
-                    <button
-                      type="button"
-                      @click="copiarConfirmBarcode2"
-                      class="p-1 rounded-md transition shrink-0"
-                      :class="confirmBarcodeCopied2 ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
-                      title="Copiar código de barras (Opción 2)"
-                    >
-                      <CheckCircle v-if="confirmBarcodeCopied2" class="w-3.5 h-3.5" />
                       <Copy v-else class="w-3.5 h-3.5" />
                     </button>
                   </div>

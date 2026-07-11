@@ -28,42 +28,38 @@ export interface Recibo {
 
 export interface HistoryItem {
   id: string
-  type: 'call' | 'reminder' | 'payment' | 'visit'
   date: string
-  description: string
   reciboId: string
   reciboName: string
-  amount?: number
+  valorRecibo: number
+  comision: number | null
+  valorTotal: number
+  pagado: boolean
 }
 
-interface ApiTipoNotif { idTipoNotificacion: number; nombre: string; precio: number | null; requiereCobro: number }
 interface ApiReciboSimple { idRecibo: number; nombre: string }
-interface ApiHistorialNotificacion {
-  idHistorialNotificacion: number
+interface ApiHistorialPagoRecibo {
+  idHistorialPagoRecibo: number
   idRecibo: number
-  observacion: string | null
-  fechaNotificacion: string | null
-  tipo_notificacion: ApiTipoNotif | null
+  valorRecibo: number
+  comision: number | null
+  valorTotal: number
+  pagado: number
+  fechaSolicitud: string | null
+  fechaPago: string | null
   recibo: ApiReciboSimple | null
 }
 
-function inferNotifType(nombre: string): HistoryItem['type'] {
-  const n = nombre.toLowerCase()
-  if (n.includes('llamada') || n.includes('call') || n.includes('telefon')) return 'call'
-  if (n.includes('visita') || n.includes('visit'))                           return 'visit'
-  if (n.includes('pago') || n.includes('cobro') || n.includes('payment'))   return 'payment'
-  return 'reminder'
-}
-
-function mapHistorial(h: ApiHistorialNotificacion): HistoryItem {
-  const tipoNombre = h.tipo_notificacion?.nombre ?? 'Notificación'
+function mapHistorialPago(h: ApiHistorialPagoRecibo): HistoryItem {
   return {
-    id:          String(h.idHistorialNotificacion),
-    type:        inferNotifType(tipoNombre),
-    date:        h.fechaNotificacion ?? '',
-    description: h.observacion ?? tipoNombre,
+    id:          String(h.idHistorialPagoRecibo),
+    date:        h.fechaPago ?? h.fechaSolicitud ?? '',
     reciboId:    String(h.idRecibo),
     reciboName:  h.recibo?.nombre ?? `Recibo #${h.idRecibo}`,
+    valorRecibo: h.valorRecibo,
+    comision:    h.comision,
+    valorTotal:  h.valorTotal,
+    pagado:      !!h.pagado,
   }
 }
 
@@ -118,6 +114,7 @@ function parseDate(s: string) {
 function calcStatus(api: ApiRecibo): ReciboStatus {
   if (api.estado_recibo?.idEstadoRecibo === 4) return 'processing'
   if (api.estado_recibo?.idEstadoRecibo === 5) return 'reviewing'
+  if (api.estado_recibo?.idEstadoRecibo === 7) return 'paid' // consultarFactura: uso interno del admin, para el cliente se ve como pagado
 
   const estadoNombre = (api.estado_recibo?.nombre ?? '').toLowerCase()
   if (PAID_NAMES.some(p => estadoNombre.includes(p))) return 'paid'
@@ -221,11 +218,11 @@ export const useRecibosStore = defineStore('recibos', () => {
     if (!auth.user) return
     loadingHistory.value = true
     try {
-      const data = await api.get<ApiHistorialNotificacion[]>(
-        `/historial-notificaciones?idCliente=${auth.user.idCliente}`,
+      const data = await api.get<ApiHistorialPagoRecibo[]>(
+        `/historial-pago-recibos?idCliente=${auth.user.idCliente}`,
         auth.token,
       )
-      history.value = data.map(mapHistorial)
+      history.value = data.map(mapHistorialPago)
     } finally {
       loadingHistory.value = false
     }
