@@ -347,6 +347,8 @@ function closePagoModal() {
   codigoCopied.value   = false
   barcodeCopied.value  = false
   barcodeCopied2.value = false
+  telefonoCopied.value = false
+  correoCopied.value   = false
   pagoFile.value       = null
   pagoPreview.value    = ''
 }
@@ -354,6 +356,8 @@ function closePagoModal() {
 const codigoCopied   = ref(false)
 const barcodeCopied  = ref(false)
 const barcodeCopied2 = ref(false)
+const telefonoCopied = ref(false)
+const correoCopied   = ref(false)
 
 function copiarCodigo() {
   const codigo = pagoEncargo.value?.codigoRecibo
@@ -361,6 +365,36 @@ function copiarCodigo() {
   navigator.clipboard.writeText(codigo).then(() => {
     codigoCopied.value = true
     setTimeout(() => { codigoCopied.value = false }, 2500)
+  })
+}
+
+const copiedCodigoGridId = ref<number | null>(null)
+
+function copiarCodigoGrid(recibo: Recibo) {
+  if (!recibo.codigoRecibo) return
+  navigator.clipboard.writeText(recibo.codigoRecibo).then(() => {
+    copiedCodigoGridId.value = recibo.idRecibo
+    setTimeout(() => {
+      if (copiedCodigoGridId.value === recibo.idRecibo) copiedCodigoGridId.value = null
+    }, 2500)
+  })
+}
+
+function copiarTelefono() {
+  const telefono = pagoEncargo.value?.cliente?.telefonoPrincipal
+  if (!telefono) return
+  navigator.clipboard.writeText(String(telefono)).then(() => {
+    telefonoCopied.value = true
+    setTimeout(() => { telefonoCopied.value = false }, 2500)
+  })
+}
+
+function copiarCorreo() {
+  const correo = pagoEncargo.value?.cliente?.correo
+  if (!correo) return
+  navigator.clipboard.writeText(correo).then(() => {
+    correoCopied.value = true
+    setTimeout(() => { correoCopied.value = false }, 2500)
   })
 }
 
@@ -780,17 +814,17 @@ const pages = computed(() => {
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                <th class="text-left px-5 py-3.5">ID</th>
-                <th class="text-left px-5 py-3.5">Recibo</th>
-                <th class="text-left px-5 py-3.5">Cliente</th>
-                <th class="text-left px-5 py-3.5">Teléfono</th>
-                <th class="text-left px-5 py-3.5">Empresa</th>
-                <th class="text-left px-5 py-3.5">Tipo</th>
+                <!-- <th class="text-left px-5 py-3.5">ID</th> -->
+                <th class="text-left px-5 py-3.5">Estado</th>
                 <th class="text-right px-5 py-3.5">Valor</th>
                 <th class="text-left px-5 py-3.5">Fecha límite</th>
                 <th class="text-right px-5 py-3.5">Días</th>
-                <th class="text-left px-5 py-3.5">Estado</th>
-                <th class="px-5 py-3.5"></th>
+                <th class="text-left px-5 py-3.5">Empresa</th>
+                <th class="text-left px-5 py-3.5">Cliente</th>
+                <th class="text-left px-5 py-3.5">Recibo</th>
+                <th class="text-left px-5 py-3.5">Teléfono</th>
+                <!-- <th class="text-left px-5 py-3.5">Tipo</th> -->
+                <th class="px-5 py-3.5 sticky right-0 z-20 bg-slate-50 border-l border-slate-200"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -798,7 +832,7 @@ const pages = computed(() => {
                 v-for="recibo in recibos"
                 :key="recibo.idRecibo"
                 :class="[
-                  'transition-colors',
+                  'transition-colors group',
                   isPagoEncargo(recibo)
                     ? 'bg-orange-50 hover:bg-orange-100 border-l-4 border-orange-400'
                     : isPendienteRevisar(recibo)
@@ -806,30 +840,13 @@ const pages = computed(() => {
                     : 'hover:bg-slate-50',
                 ]"
               >
-                <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ recibo.idRecibo }}</td>
+                <!-- <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ recibo.idRecibo }}</td> -->
 
                 <td class="px-5 py-3.5">
-                  <p class="font-medium text-slate-800 truncate max-w-[160px]">{{ recibo.nombre }}</p>
-                  <p v-if="recibo.codigoRecibo" class="text-slate-400 text-xs font-mono">{{ recibo.codigoRecibo }}</p>
-                </td>
-
-                <td class="px-5 py-3.5">
-                  <p class="text-slate-700 truncate max-w-[140px]">{{ clienteNombre(recibo) }}</p>
-                  <p v-if="recibo.cliente" class="text-slate-400 text-xs font-mono">{{ recibo.cliente.cedula }}</p>
-                </td>
-
-                <td class="px-5 py-3.5 whitespace-nowrap">
-                  <p v-if="recibo.cliente" class="text-slate-700 text-sm">{{ recibo.cliente.telefonoPrincipal }}</p>
-                  <p v-else class="text-slate-400">—</p>
-                </td>
-
-                <td class="px-5 py-3.5 text-slate-600 truncate max-w-[120px]">
-                  {{ recibo.empresa_servicio?.nombre ?? '—' }}
-                </td>
-
-                <td class="px-5 py-3.5 text-slate-500 truncate max-w-[100px]">
-                  {{ recibo.tipo_factura?.nombre ?? '—' }}
-                </td>
+                  <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap', statusClass(recibo)]">
+                    {{ statusLabel(recibo) }}
+                  </span>
+                </td>                
 
                 <td class="px-5 py-3.5 text-right font-medium text-slate-800 whitespace-nowrap">
                   {{ formatPrecio(recibo.precio) }}
@@ -860,13 +877,53 @@ const pages = computed(() => {
                   </template>
                 </td>
 
-                <td class="px-5 py-3.5">
-                  <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap', statusClass(recibo)]">
-                    {{ statusLabel(recibo) }}
-                  </span>
+                <td class="px-5 py-3.5 text-slate-600 truncate max-w-[120px]">
+                  {{ recibo.empresa_servicio?.nombre ?? '—' }}
                 </td>
 
-                <td class="px-5 py-3.5 text-right">
+                <td class="px-5 py-3.5">
+                  <p class="text-slate-700 truncate max-w-[140px]">{{ clienteNombre(recibo) }}</p>
+                  <p v-if="recibo.cliente" class="text-slate-400 text-xs font-mono">{{ recibo.cliente.cedula }}</p>
+                </td>
+
+                <td class="px-5 py-3.5">
+                  <p class="font-medium text-slate-800 truncate max-w-[160px]">{{ recibo.nombre }}</p>
+                  <p v-if="recibo.codigoRecibo" class="flex items-center gap-1 text-slate-400 text-xs font-mono">
+                    <button
+                      type="button"
+                      @click="copiarCodigoGrid(recibo)"
+                      class="shrink-0 p-0.5 rounded transition"
+                      :class="copiedCodigoGridId === recibo.idRecibo ? 'text-success-600' : 'text-slate-300 hover:text-slate-600 hover:bg-slate-100'"
+                      :title="copiedCodigoGridId === recibo.idRecibo ? '¡Copiado!' : 'Copiar código'"
+                    >
+                      <CheckCircle v-if="copiedCodigoGridId === recibo.idRecibo" class="w-3 h-3" />
+                      <Copy v-else class="w-3 h-3" />
+                    </button>
+                    {{ recibo.codigoRecibo }}
+                  </p>
+                </td>
+
+                <td class="px-5 py-3.5 whitespace-nowrap">
+                  <p v-if="recibo.cliente" class="text-slate-700 text-sm">{{ recibo.cliente.telefonoPrincipal }}</p>
+                  <p v-else class="text-slate-400">—</p>
+                </td>
+
+                
+
+                <!-- <td class="px-5 py-3.5 text-slate-500 truncate max-w-[100px]">
+                  {{ recibo.tipo_factura?.nombre ?? '—' }}
+                </td> -->
+
+                <td
+                  :class="[
+                    'px-5 py-3.5 text-right sticky right-0 z-10 border-l border-slate-200 transition-colors',
+                    isPagoEncargo(recibo)
+                      ? 'bg-orange-50 group-hover:bg-orange-100'
+                      : isPendienteRevisar(recibo)
+                      ? 'bg-amber-50 group-hover:bg-amber-100'
+                      : 'bg-white group-hover:bg-slate-50',
+                  ]"
+                >
                   <div class="flex items-center justify-end gap-1">
                     <button
                       v-if="isPagoEncargo(recibo)"
@@ -1178,9 +1235,39 @@ const pages = computed(() => {
               </div>
               <div v-if="pagoEncargo.cliente" class="flex items-center justify-between px-4 py-3">
                 <span class="text-xs text-slate-400">Teléfono</span>
-                <a :href="`tel:${pagoEncargo.cliente.telefonoPrincipal}`" class="text-sm font-medium text-primary-600 hover:underline">
-                  {{ pagoEncargo.cliente.telefonoPrincipal }}
-                </a>
+                <div class="flex items-center gap-2">
+                  <a :href="`tel:${pagoEncargo.cliente.telefonoPrincipal}`" class="text-sm font-medium text-primary-600 hover:underline">
+                    {{ pagoEncargo.cliente.telefonoPrincipal }}
+                  </a>
+                  <button
+                    type="button"
+                    @click="copiarTelefono"
+                    class="p-1 rounded-md transition"
+                    :class="telefonoCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                    title="Copiar teléfono"
+                  >
+                    <CheckCircle v-if="telefonoCopied" class="w-3.5 h-3.5" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div v-if="pagoEncargo.cliente?.correo" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Correo</span>
+                <div class="flex items-center gap-2">
+                  <a :href="`mailto:${pagoEncargo.cliente.correo}`" class="text-sm font-medium text-primary-600 hover:underline truncate max-w-[160px]">
+                    {{ pagoEncargo.cliente.correo }}
+                  </a>
+                  <button
+                    type="button"
+                    @click="copiarCorreo"
+                    class="p-1 rounded-md transition shrink-0"
+                    :class="correoCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                    title="Copiar correo"
+                  >
+                    <CheckCircle v-if="correoCopied" class="w-3.5 h-3.5" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 

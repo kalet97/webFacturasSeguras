@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock } from 'lucide-vue-next'
+import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock, RefreshCw } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useRecibosStore } from '@/stores/recibos'
 import { api } from '@/services/api'
@@ -17,6 +17,7 @@ const whatsappNumber    = ref('')
 const deudaPendiente    = ref(0)
 const showLimitModal    = ref(false)
 const todosLosPlanes    = ref<PlanInfo[]>([])
+const refreshing        = ref(false)
 
 const planesUpgrade = computed(() => {
   const idActual = auth.user?.plan?.idPlan ?? 0
@@ -59,6 +60,16 @@ async function fetchWhatsapp() {
     const res = await api.get<{ valor: string }>('/parametros-generales/whatsapp', auth.token)
     whatsappNumber.value = res.valor
   } catch {}
+}
+
+async function handleRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await Promise.all([store.fetchRecibos(), fetchDeuda(), fetchPlanes(), fetchWhatsapp(), auth.refreshUser()])
+  } finally {
+    refreshing.value = false
+  }
 }
 
 onMounted(() => { store.fetchRecibos(); fetchDeuda(); fetchPlanes(); fetchWhatsapp(); auth.refreshUser() })
@@ -112,10 +123,20 @@ const mostrarAvisoSuscripcion = computed(() => {
           <p class="text-primary-100 text-sm">{{ greeting() }}</p>
           <h2 class="text-white font-bold text-xl mt-0.5">{{ auth.user?.name?.split(' ')[0] }}</h2>
         </div>
-        <button class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center relative">
-          <Bell class="w-5 h-5 text-white" />
-          <span v-if="overdue > 0" class="absolute top-1 right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-primary-600" />
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            class="h-10 px-3 bg-white/20 rounded-xl flex items-center gap-1.5 text-white text-sm font-medium disabled:opacity-60"
+            :disabled="refreshing"
+            @click="handleRefresh"
+          >
+            <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': refreshing }" />
+            Actualizar
+          </button>
+          <button class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center relative">
+            <Bell class="w-5 h-5 text-white" />
+            <span v-if="overdue > 0" class="absolute top-1 right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-primary-600" />
+          </button>
+        </div>
       </div>
 
       <div class="bg-white/15 rounded-2xl p-4">
