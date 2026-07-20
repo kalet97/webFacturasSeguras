@@ -79,11 +79,20 @@ const overdue = computed(() => store.recibos.filter(r => r.status === 'overdue')
 const soon = computed(() => store.recibos.filter(r => r.status === 'soon').length)
 const paid = computed(() => store.recibos.filter(r => r.status === 'paid').length)
 
-const totalPending = computed(() =>
+const recargo4x1000 = computed(() =>
+  store.recibos
+    .filter(r => r.status !== 'paid')
+    .reduce((s, r) => s + (r.surcharge ?? 0), 0)
+)
+
+const totalPendingSinRedondeo = computed(() =>
   store.recibos
     .filter(r => r.status !== 'paid' && r.amount)
-    .reduce((s, r) => s + (r.amount ?? 0), 0)
+    .reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0)
 )
+
+// Siempre se muestra redondeado hacia arriba a la centena (los últimos 2 dígitos en 00).
+const totalPending = computed(() => Math.ceil(totalPendingSinRedondeo.value / 100) * 100)
 
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
@@ -145,6 +154,10 @@ const mostrarAvisoSuscripcion = computed(() => {
         <div v-if="deudaPendiente > 0" class="flex items-center justify-between mt-2 bg-white/10 rounded-xl px-3 py-2">
           <p class="text-white/80 text-xs">Deuda pendiente por gestión</p>
           <p class="text-white text-sm font-bold">{{ formatCurrency(deudaPendiente) }}</p>
+        </div>
+        <div v-if="recargo4x1000 > 0" class="flex items-center justify-between mt-2 bg-white/10 rounded-xl px-3 py-2">
+          <p class="text-white/80 text-xs">Incluye cargo 4x1000</p>
+          <p class="text-white text-sm font-bold">{{ formatCurrency(recargo4x1000) }}</p>
         </div>
         <div class="flex gap-3 mt-3">
           <div class="flex items-center gap-1.5">

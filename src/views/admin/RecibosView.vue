@@ -5,7 +5,7 @@ import {
   AlertCircle, Eye, X, Phone, Mail, MapPin, CreditCard,
   Building2, Calendar, Hash, MessageCircle, CheckCircle,
   Banknote, ImageOff, ArrowLeftRight, ImagePlus, History, Copy,
-  FileEdit, CalendarPlus,
+  FileEdit, CalendarPlus, Pencil,
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
@@ -46,6 +46,7 @@ interface HistorialPagoRecibo {
   pagado: number
   fechaSolicitud: string | null
   urlComprobante: string | null
+  urlComprobanteRecibo: string | null
 }
 
 
@@ -235,12 +236,16 @@ const actualizarPrecio        = ref<number | null>(null)
 const actualizarPrecioDisplay = ref('')
 const actualizarFechaMaxima   = ref('')
 const actualizarCodigoCopied  = ref(false)
+const actualizarClienteCensCopied = ref(false)
+const actualizarCodigoRecibo         = ref('')
+const actualizarCodigoReciboOriginal = ref('')
+const actualizarEditandoCodigo       = ref(false)
 const actualizarPrecioOriginal      = ref<number | null>(null)
 const actualizarFechaMaximaOriginal = ref('')
+const actualizarAdvertenciaPrecio   = ref(false)
 
-const actualizarSinCambios = computed(() => {
-  return actualizarPrecio.value === actualizarPrecioOriginal.value
-    || actualizarFechaMaxima.value === actualizarFechaMaximaOriginal.value
+const actualizarFechaSinCambio = computed(() => {
+  return actualizarFechaMaxima.value === actualizarFechaMaximaOriginal.value
 })
 
 function formatMiles(valor: number | null): string {
@@ -252,6 +257,7 @@ function onActualizarPrecioInput(e: Event) {
   const digitos = (e.target as HTMLInputElement).value.replace(/\D/g, '')
   actualizarPrecio.value        = digitos ? Number(digitos) : null
   actualizarPrecioDisplay.value = formatMiles(actualizarPrecio.value)
+  actualizarAdvertenciaPrecio.value = false
 }
 
 function openActualizarModal(r: Recibo) {
@@ -261,6 +267,11 @@ function openActualizarModal(r: Recibo) {
   actualizarFechaMaxima.value  = r.fechaMaxima ? r.fechaMaxima.slice(0, 10) : ''
   actualizarError.value        = ''
   actualizarCodigoCopied.value = false
+  actualizarClienteCensCopied.value = false
+  actualizarCodigoRecibo.value         = r.codigoRecibo ?? ''
+  actualizarCodigoReciboOriginal.value = r.codigoRecibo ?? ''
+  actualizarEditandoCodigo.value       = false
+  actualizarAdvertenciaPrecio.value   = false
   actualizarPrecioOriginal.value      = r.precio
   actualizarFechaMaximaOriginal.value = actualizarFechaMaxima.value
   showActualizarModal.value    = true
@@ -271,15 +282,57 @@ function closeActualizarModal() {
   actualizarRecibo.value       = null
   actualizarError.value        = ''
   actualizarCodigoCopied.value = false
+  actualizarClienteCensCopied.value = false
+  actualizarEditandoCodigo.value     = false
+  actualizarAdvertenciaPrecio.value = false
+}
+
+function toggleEditarCodigo() {
+  actualizarEditandoCodigo.value = !actualizarEditandoCodigo.value
 }
 
 function copiarCodigoActualizar() {
-  const codigo = actualizarRecibo.value?.codigoRecibo
+  const codigo = actualizarCodigoRecibo.value
   if (!codigo) return
   navigator.clipboard.writeText(codigo).then(() => {
     actualizarCodigoCopied.value = true
     setTimeout(() => { actualizarCodigoCopied.value = false }, 2500)
   })
+}
+
+function copiarClienteCens() {
+  const numero = clienteCENS()
+  if (!numero) return
+  navigator.clipboard.writeText(numero).then(() => {
+    actualizarClienteCensCopied.value = true
+    setTimeout(() => { actualizarClienteCensCopied.value = false }, 2500)
+  })
+}
+
+// Botón "Ir a pagar": para CENS copia el número de cliente CENS; para el resto, el código/N° de cuenta.
+function copiarParaRedireccion() {
+  const numeroCens = clienteCENS()
+  if (numeroCens) {
+    navigator.clipboard.writeText(numeroCens).then(() => {
+      actualizarClienteCensCopied.value = true
+      setTimeout(() => { actualizarClienteCensCopied.value = false }, 2500)
+    })
+    return
+  }
+  copiarCodigoActualizar()
+}
+
+// CENS codifica el N° de cliente dentro del código/N° de cuenta: dígitos 6 a 12, sin ceros a la izquierda.
+// Ej: 01000111737734 -> 1117377 · 01000021413970 -> 214139
+// Usa el código editable (actualizarCodigoRecibo) para reflejar correcciones antes de guardar.
+function clienteCENS(): string | null {
+  const esCENS = (actualizarRecibo.value?.empresa_servicio?.nombre ?? '').toLowerCase().includes('cens')
+  const codigo = actualizarCodigoRecibo.value
+  if (!esCENS || !codigo) return null
+  const digitos = codigo.replace(/\D/g, '')
+  if (digitos.length < 12) return null
+  const numero = digitos.slice(5, 12).replace(/^0+/, '')
+  return numero || null
 }
 
 function sumarMesActualizar() {
@@ -290,19 +343,26 @@ function sumarMesActualizar() {
 
 async function guardarActualizarFactura() {
   if (!actualizarRecibo.value) return
-  if (actualizarSinCambios.value) {
-    actualizarError.value = 'Debes modificar tanto el valor como la fecha límite de pago antes de guardar.'
+  if (actualizarFechaSinCambio.value) {
+    actualizarError.value = 'Debes modificar la fecha límite de pago antes de guardar.'
+    return
+  }
+  const precioSinCambio = actualizarPrecio.value === actualizarPrecioOriginal.value
+  if (precioSinCambio && !actualizarAdvertenciaPrecio.value) {
+    actualizarAdvertenciaPrecio.value = true
     return
   }
   actualizarLoading.value = true
   actualizarError.value   = ''
   try {
     const ESTADO_PENDIENTE = 1
+    const codigoCambio = actualizarCodigoRecibo.value !== actualizarCodigoReciboOriginal.value
     await api.put(`/recibos/${actualizarRecibo.value.idRecibo}`, {
       precio:          actualizarPrecio.value,
       fechaMaxima:     actualizarFechaMaxima.value || null,
       idEstadoRecibo:  ESTADO_PENDIENTE,
       idUsuario:       adminAuth.user?.idUsuario ?? null,
+      ...(codigoCambio ? { codigoRecibo: actualizarCodigoRecibo.value } : {}),
     }, adminAuth.token)
 
     const nuevoEstado = estados.value.find(e => e.idEstadoRecibo === ESTADO_PENDIENTE) ?? null
@@ -313,10 +373,17 @@ async function guardarActualizarFactura() {
         precio:       actualizarPrecio.value,
         fechaMaxima:  actualizarFechaMaxima.value || null,
         estado_recibo: nuevoEstado,
+        ...(codigoCambio ? { codigoRecibo: actualizarCodigoRecibo.value } : {}),
       }
     }
     if (selected.value?.idRecibo === actualizarRecibo.value.idRecibo) {
-      selected.value = { ...selected.value, precio: actualizarPrecio.value, fechaMaxima: actualizarFechaMaxima.value || null, estado_recibo: nuevoEstado }
+      selected.value = {
+        ...selected.value,
+        precio: actualizarPrecio.value,
+        fechaMaxima: actualizarFechaMaxima.value || null,
+        estado_recibo: nuevoEstado,
+        ...(codigoCambio ? { codigoRecibo: actualizarCodigoRecibo.value } : {}),
+      }
     }
 
     closeActualizarModal()
@@ -1284,10 +1351,35 @@ const pages = computed(() => {
                 <span class="text-xs text-slate-400">Empresa</span>
                 <span class="text-sm font-medium text-slate-700">{{ actualizarRecibo.empresa_servicio?.nombre ?? '—' }}</span>
               </div>
-              <div v-if="actualizarRecibo.codigoRecibo" class="flex items-center justify-between px-4 py-3">
-                <span class="text-xs text-slate-400">Código / N° cuenta</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-mono text-slate-700">{{ actualizarRecibo.codigoRecibo }}</span>
+              <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400 shrink-0">Código / N° cuenta</span>
+                <div v-if="actualizarEditandoCodigo" class="flex items-center gap-2 flex-1 justify-end">
+                  <input
+                    v-model="actualizarCodigoRecibo"
+                    type="text"
+                    autofocus
+                    class="w-40 px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-mono text-slate-800 text-right
+                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
+                  />
+                  <button
+                    type="button"
+                    @click="toggleEditarCodigo"
+                    class="p-1 rounded-md text-success-600 hover:bg-success-50 transition"
+                    title="Listo"
+                  >
+                    <CheckCircle class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div v-else class="flex items-center gap-2">
+                  <span class="text-sm font-mono text-slate-700">{{ actualizarCodigoRecibo || '—' }}</span>
+                  <button
+                    type="button"
+                    @click="toggleEditarCodigo"
+                    class="p-1 rounded-md text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition"
+                    title="Editar código/cuenta"
+                  >
+                    <Pencil class="w-3.5 h-3.5" />
+                  </button>
                   <button
                     type="button"
                     @click="copiarCodigoActualizar"
@@ -1300,11 +1392,42 @@ const pages = computed(() => {
                   </button>
                 </div>
               </div>
+              <div v-if="clienteCENS()" class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-slate-400">Cliente CENS</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-mono text-slate-700">{{ clienteCENS() }}</span>
+                  <button
+                    type="button"
+                    @click="copiarClienteCens"
+                    class="p-1 rounded-md transition"
+                    :class="actualizarClienteCensCopied ? 'text-success-600' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'"
+                    title="Copiar Cliente CENS"
+                  >
+                    <CheckCircle v-if="actualizarClienteCensCopied" class="w-3.5 h-3.5" />
+                    <Copy v-else class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
               <div v-if="actualizarRecibo.cliente" class="flex items-center justify-between px-4 py-3">
                 <span class="text-xs text-slate-400">Cliente</span>
                 <span class="text-sm text-slate-700">{{ clienteNombre(actualizarRecibo) }}</span>
               </div>
             </div>
+
+            <!-- Link de pago de la empresa -->
+            <a
+              v-if="actualizarRecibo.empresa_servicio?.link"
+              :href="actualizarRecibo.empresa_servicio.link"
+              target="_blank"
+              rel="noopener"
+              @click="copiarParaRedireccion"
+              class="flex items-center justify-center gap-2 w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold rounded-xl transition"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              {{ (actualizarCodigoCopied || actualizarClienteCensCopied) ? '¡Código copiado!' : `Ir a pagar en ${actualizarRecibo.empresa_servicio.nombre}` }}
+            </a>
 
             <!-- Valor -->
             <div>
@@ -1340,6 +1463,10 @@ const pages = computed(() => {
               </div>
             </div>
 
+            <div v-if="actualizarAdvertenciaPrecio" class="flex items-center gap-2 text-sm text-warning-600 bg-warning-50 border border-warning-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> El valor de la factura no cambió respecto al registrado anteriormente. Haz clic en Guardar de nuevo para confirmar que es correcto.
+            </div>
+
             <div v-if="actualizarError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
               <AlertCircle class="w-4 h-4 shrink-0" /> {{ actualizarError }}
             </div>
@@ -1357,14 +1484,14 @@ const pages = computed(() => {
             </button>
             <button
               @click="guardarActualizarFactura"
-              :disabled="actualizarLoading || actualizarSinCambios"
+              :disabled="actualizarLoading || actualizarFechaSinCambio"
               class="flex-1 py-2.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
               <svg v-if="actualizarLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-              {{ actualizarLoading ? 'Guardando...' : 'Guardar' }}
+              {{ actualizarLoading ? 'Guardando...' : actualizarAdvertenciaPrecio ? 'Confirmar y guardar' : 'Guardar' }}
             </button>
           </div>
 
@@ -1797,11 +1924,19 @@ const pages = computed(() => {
                         <p class="text-sm font-semibold text-primary-600">{{ formatPrecio(p.valorTotal) }}</p>
                       </div>
                     </div>
-                    <div v-if="p.urlComprobante" class="pt-1">
-                      <p class="text-xs text-slate-400 mb-1">Comprobante cliente</p>
-                      <a :href="p.urlComprobante" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:underline font-medium">
-                        <Eye class="w-3.5 h-3.5" /> Ver imagen
-                      </a>
+                    <div v-if="p.urlComprobante || p.urlComprobanteRecibo" class="grid grid-cols-2 gap-3 pt-1">
+                      <div v-if="p.urlComprobante">
+                        <p class="text-xs text-slate-400 mb-1">Comprobante cliente</p>
+                        <a :href="p.urlComprobante" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:underline font-medium">
+                          <Eye class="w-3.5 h-3.5" /> Ver imagen
+                        </a>
+                      </div>
+                      <div v-if="p.urlComprobanteRecibo">
+                        <p class="text-xs text-slate-400 mb-1">Comprobante nuestro (pago realizado)</p>
+                        <a :href="p.urlComprobanteRecibo" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:underline font-medium">
+                          <Eye class="w-3.5 h-3.5" /> Ver imagen
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ export interface Recibo {
   dueDate: string
   address: string
   amount?: number
+  surcharge?: number
   status: ReciboStatus
   daysLeft: number
   notifications: Notification[]
@@ -75,6 +76,7 @@ interface ApiRecibo {
   codigoRecibo: string | null
   nombre: string
   precio: number | null
+  cargoAdicional: number | null
   fechaOportuna: string | null
   fechaMaxima: string | null
   fechaSistem: string | null
@@ -143,6 +145,7 @@ function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
     dueDate: r.fechaMaxima ?? r.fechaOportuna ?? '',
     address: clienteAddress,
     amount: r.precio ?? undefined,
+    surcharge: r.cargoAdicional ?? undefined,
     status,
     daysLeft: status === 'paid' || status === 'reviewing' ? 0 : calcDaysLeft(r.fechaMaxima),
     notifications: [],

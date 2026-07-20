@@ -269,6 +269,9 @@ async function handleMarkPaid() {
         <div class="bg-slate-50 rounded-2xl p-4 mb-4">
           <p class="text-xs text-slate-400 mb-1">Valor del recibo</p>
           <p class="text-2xl font-black text-slate-800">{{ formatCurrency(recibo.amount) }}</p>
+          <p v-if="recibo.surcharge" class="text-xs text-warning-600 font-medium mt-1">
+            + {{ formatCurrency(recibo.surcharge) }} cargo adicional 4x1000
+          </p>
           <p
             v-if="recibo.status !== 'paid'"
             :class="[

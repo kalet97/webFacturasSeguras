@@ -66,6 +66,9 @@ const daysColor: Record<string, string> = {
              : daysLabel(props.recibo.daysLeft) }}
           </p>
         </div>
+        <p v-if="props.recibo.surcharge" class="text-xs text-warning-600 mt-0.5">
+          + {{ formatCurrency(props.recibo.surcharge) }} cargo 4x1000
+        </p>
       </div>
 
       <ChevronRight class="w-4 h-4 text-slate-300 shrink-0" />
