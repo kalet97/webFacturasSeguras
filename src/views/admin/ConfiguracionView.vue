@@ -84,6 +84,8 @@ const WHATSAPP_VARS = ['{nombre}', '{empresa}', '{servicio}', '{monto}', '{fecha
 const labels: Record<string, { label: string; icon: string }> = {
   nequi:             { label: 'Número Nequi',                        icon: '💸' },
   nequiTitular:      { label: 'Titular de la cuenta Nequi',          icon: '👤' },
+  llave:             { label: 'Llave (alfanumérica)',                icon: '🔑' },
+  llaveTitular:      { label: 'Titular de la cuenta (Llave)',        icon: '👤' },
   consecutivoEPM:    { label: 'Consecutivo de energía (EPM)',        icon: '⚡' },
   indicativoEPM:     { label: 'Indicativo EPM (prefijo código barras)', icon: '🔢' },
   diasNotificacion:  { label: 'Días de anticipación para notificar', icon: '🔔' },

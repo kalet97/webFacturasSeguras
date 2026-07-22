@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Upload, CheckCircle, Info } from 'lucide-vue-next'
+import { Upload, CheckCircle, Info, Copy } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -19,6 +19,8 @@ const recibo = computed(() => store.getReciboById(id))
 
 const nequiNumber  = ref<string | null>(null)
 const nequiTitular = ref<string | null>(null)
+const llaveValue   = ref<string | null>(null)
+const llaveTitular = ref<string | null>(null)
 
 onMounted(async () => {
   if (!recibo.value) {
@@ -26,16 +28,32 @@ onMounted(async () => {
   }
 
   try {
-    const [numParam, titularParam] = await Promise.all([
+    const [numParam, titularParam, llaveParam, llaveTitularParam] = await Promise.all([
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequi',        auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequiTitular', auth.token),
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/llave',        auth.token),
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/llaveTitular', auth.token),
     ])
     nequiNumber.value  = numParam?.valor  ?? null
     nequiTitular.value = titularParam?.valor ?? null
+    llaveValue.value   = llaveParam?.valor ?? null
+    llaveTitular.value = llaveTitularParam?.valor ?? null
   } catch {
     // si falla, no se muestran los datos
   }
 })
+
+const copiedField = ref<'nequi' | 'llave' | null>(null)
+
+function copyValue(field: 'nequi' | 'llave', value: string | null) {
+  if (!value) return
+  navigator.clipboard.writeText(value).then(() => {
+    copiedField.value = field
+    setTimeout(() => {
+      if (copiedField.value === field) copiedField.value = null
+    }, 2000)
+  })
+}
 
 const commission = computed(() => {
   const plan = auth.user?.plan
@@ -152,9 +170,48 @@ async function confirmPayment() {
         </div> -->
         <div class="bg-primary-50 rounded-2xl p-3 text-center">
           <p class="text-xs text-slate-500">Número Nequi</p>
-          <p v-if="nequiNumber" class="font-bold text-primary-600 text-lg mt-0.5">{{ nequiNumber }}</p>
+          <div v-if="nequiNumber" class="flex items-center justify-center gap-2 mt-0.5">
+            <p class="font-bold text-primary-600 text-lg">{{ nequiNumber }}</p>
+            <button
+              type="button"
+              @click="copyValue('nequi', nequiNumber)"
+              :class="[
+                'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors shrink-0',
+                copiedField === 'nequi' ? 'bg-success-100 text-success-600' : 'bg-white text-primary-600 hover:bg-primary-100',
+              ]"
+              :title="copiedField === 'nequi' ? '¡Copiado!' : 'Copiar número'"
+            >
+              <CheckCircle v-if="copiedField === 'nequi'" class="w-3.5 h-3.5" />
+              <Copy v-else class="w-3.5 h-3.5" />
+              {{ copiedField === 'nequi' ? 'Copiado' : 'Copiar' }}
+            </button>
+          </div>
           <p v-else class="text-sm text-slate-400 mt-0.5">Cargando...</p>
           <p v-if="nequiTitular" class="text-xs text-slate-500 mt-1">{{ nequiTitular }}</p>
+        </div>
+      </div>
+
+      <div v-if="llaveValue" class="card mb-4">
+        <h3 class="font-bold text-slate-800 mb-1">Paga por Llave</h3>
+        <div class="bg-primary-50 rounded-2xl p-3 text-center">
+          <p class="text-xs text-slate-500">Llave</p>
+          <div class="flex items-center justify-center gap-2 mt-0.5">
+            <p class="font-bold text-primary-600 text-lg break-all">{{ llaveValue }}</p>
+            <button
+              type="button"
+              @click="copyValue('llave', llaveValue)"
+              :class="[
+                'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors shrink-0',
+                copiedField === 'llave' ? 'bg-success-100 text-success-600' : 'bg-white text-primary-600 hover:bg-primary-100',
+              ]"
+              :title="copiedField === 'llave' ? '¡Copiado!' : 'Copiar llave'"
+            >
+              <CheckCircle v-if="copiedField === 'llave'" class="w-3.5 h-3.5" />
+              <Copy v-else class="w-3.5 h-3.5" />
+              {{ copiedField === 'llave' ? 'Copiado' : 'Copiar' }}
+            </button>
+          </div>
+          <p v-if="llaveTitular" class="text-xs text-slate-500 mt-1">{{ llaveTitular }}</p>
         </div>
       </div>
 
