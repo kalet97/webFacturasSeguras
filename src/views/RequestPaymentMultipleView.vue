@@ -6,6 +6,7 @@ import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
 import { calcComision } from '@/utils/comision'
+import { roundUpToHundred } from '@/utils/money'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
@@ -29,7 +30,9 @@ const items = computed(() => {
 })
 
 const commissionTotal = computed(() => items.value.reduce((s, i) => s + i.comision, 0))
-const total = computed(() => items.value.reduce((s, i) => s + i.total, 0))
+const totalSinRedondeo = computed(() => items.value.reduce((s, i) => s + i.total, 0))
+const total = computed(() => roundUpToHundred(totalSinRedondeo.value))
+const redondeo = computed(() => total.value - totalSinRedondeo.value)
 
 const nequiNumber  = ref<string | null>(null)
 const nequiTitular = ref<string | null>(null)
@@ -136,7 +139,7 @@ async function confirmPayment() {
         <div class="space-y-3">
           <div class="flex justify-between items-center py-2 border-b border-slate-50">
             <span class="text-sm text-slate-600">Subtotal recibos</span>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(total - commissionTotal) }}</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(totalSinRedondeo - commissionTotal) }}</span>
           </div>
           <div v-if="commissionTotal > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <div class="flex items-center gap-1.5">
@@ -144,6 +147,10 @@ async function confirmPayment() {
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
             <span class="font-semibold text-slate-800">{{ formatCurrency(commissionTotal) }}</span>
+          </div>
+          <div v-if="redondeo > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
+            <span class="text-sm text-slate-600">Redondeo</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(redondeo) }}</span>
           </div>
           <div class="flex justify-between items-center py-2">
             <span class="font-bold text-slate-800">Total a pagar</span>

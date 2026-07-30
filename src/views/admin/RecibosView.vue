@@ -516,13 +516,63 @@ async function confirmarPagoEncargo() {
     if (selected.value?.idRecibo === pagoEncargo.value.idRecibo) {
       selected.value = { ...selected.value, estado_recibo: estadoPagado }
     }
+    const reciboPagado = pagoEncargo.value
     closePagoModal()
     fetchContadores()
+    openPagoWhatsappModal(reciboPagado)
   } catch (e: unknown) {
     pagoError.value = e instanceof Error ? e.message : 'Error al confirmar el pago'
   } finally {
     pagoLoading.value = false
   }
+}
+
+// --- Modal WhatsApp: aviso de pago de factura realizado ---
+const showPagoWhatsappModal = ref(false)
+const pagoWhatsappRecibo    = ref<Recibo | null>(null)
+const pagoWhatsappMensaje   = ref('')
+const pagoWhatsappLoading   = ref(false)
+const pagoWhatsappError     = ref('')
+
+async function openPagoWhatsappModal(r: Recibo) {
+  if (!r.cliente || !whatsappNumero(r.cliente)) return
+  pagoWhatsappRecibo.value  = r
+  pagoWhatsappError.value   = ''
+  pagoWhatsappMensaje.value = ''
+  showPagoWhatsappModal.value = true
+  pagoWhatsappLoading.value = true
+  try {
+    const param = await api.get<{ valor: string }>('/parametros-generales/mensajePagoFactura', adminAuth.token)
+
+    const monto = r.precio != null
+      ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(r.precio)
+      : '—'
+
+    pagoWhatsappMensaje.value = param.valor
+      .replace(/{nombre}/g,   `${r.cliente.nombre} ${r.cliente.apellido}`)
+      .replace(/{empresa}/g,  r.empresa_servicio?.nombre ?? '')
+      .replace(/{servicio}/g, r.tipo_factura?.nombre ?? '')
+      .replace(/{monto}/g,    monto)
+  } catch {
+    pagoWhatsappError.value = 'No se pudo cargar el mensaje'
+  } finally {
+    pagoWhatsappLoading.value = false
+  }
+}
+
+function closePagoWhatsappModal() {
+  showPagoWhatsappModal.value = false
+  pagoWhatsappRecibo.value    = null
+  pagoWhatsappMensaje.value   = ''
+  pagoWhatsappError.value     = ''
+}
+
+function enviarPagoWhatsapp() {
+  const cliente = pagoWhatsappRecibo.value?.cliente
+  const numero  = cliente ? whatsappNumero(cliente) : null
+  if (!numero || !pagoWhatsappMensaje.value) return
+  window.open(`https://wa.me/57${numero}?text=${encodeURIComponent(pagoWhatsappMensaje.value)}`, '_blank')
+  closePagoWhatsappModal()
 }
 
 // --- Fetch ---
@@ -1309,6 +1359,71 @@ const pages = computed(() => {
               </svg>
               <CheckCircle v-else class="w-4 h-4" />
               {{ pagoLoading ? 'Procesando...' : 'Confirmar pago realizado' }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ===================== Modal WhatsApp: aviso de pago de factura realizado ===================== -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="showPagoWhatsappModal && pagoWhatsappRecibo" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="closePagoWhatsappModal" />
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[90vh]">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 bg-success-50 rounded-xl flex items-center justify-center">
+                <MessageCircle class="w-4 h-4 text-success-600" />
+              </div>
+              <div>
+                <p class="font-semibold text-slate-800 text-sm">Avisar pago al cliente</p>
+                <p class="text-xs text-slate-400">
+                  {{ pagoWhatsappRecibo.cliente?.nombre }} {{ pagoWhatsappRecibo.cliente?.apellido }}
+                </p>
+              </div>
+            </div>
+            <button @click="closePagoWhatsappModal" class="text-slate-400 hover:text-slate-600 transition p-1.5 rounded-lg hover:bg-slate-100">
+              <X class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mensaje a enviar</p>
+            <div v-if="pagoWhatsappLoading" class="flex items-center justify-center h-24 bg-slate-50 rounded-2xl">
+              <div class="w-6 h-6 border-4 border-success-100 border-t-success-500 rounded-full animate-spin" />
+            </div>
+            <textarea
+              v-else
+              v-model="pagoWhatsappMensaje"
+              rows="5"
+              class="w-full text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-2xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-success-400"
+            />
+            <div v-if="pagoWhatsappError" class="flex items-center gap-2 text-sm text-danger bg-danger-50 border border-danger-100 rounded-xl px-3 py-2.5">
+              <AlertCircle class="w-4 h-4 shrink-0" /> {{ pagoWhatsappError }}
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex gap-3 px-6 py-4 border-t border-slate-100 shrink-0">
+            <button
+              @click="closePagoWhatsappModal"
+              class="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+            >
+              Ahora no
+            </button>
+            <button
+              @click="enviarPagoWhatsapp"
+              :disabled="pagoWhatsappLoading || !pagoWhatsappMensaje"
+              class="flex-1 py-2.5 text-sm font-bold text-white bg-success-600 hover:bg-success-700 rounded-xl transition disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <MessageCircle class="w-4 h-4" />
+              Enviar por WhatsApp
             </button>
           </div>
 

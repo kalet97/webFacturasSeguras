@@ -6,6 +6,7 @@ import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
 import { calcComision } from '@/utils/comision'
+import { roundUpToHundred } from '@/utils/money'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
@@ -57,7 +58,9 @@ function copyValue(field: 'nequi' | 'llave', value: string | null) {
 }
 
 const commission = computed(() => calcComision(recibo.value?.amount ?? 0, auth.user?.plan))
-const total = computed(() => (recibo.value?.amount ?? 0) + commission.value)
+const totalSinRedondeo = computed(() => (recibo.value?.amount ?? 0) + commission.value)
+const total = computed(() => roundUpToHundred(totalSinRedondeo.value))
+const redondeo = computed(() => total.value - totalSinRedondeo.value)
 
 const fileRef = ref<HTMLInputElement | null>(null)
 const uploadedFile = ref<File | null>(null)
@@ -122,6 +125,10 @@ async function confirmPayment() {
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
             <span class="font-semibold text-slate-800">{{ formatCurrency(commission) }}</span>
+          </div>
+          <div v-if="redondeo > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
+            <span class="text-sm text-slate-600">Redondeo</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(redondeo) }}</span>
           </div>
           <div class="flex justify-between items-center py-2">
             <span class="font-bold text-slate-800">Total a pagar</span>

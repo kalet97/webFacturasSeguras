@@ -5,6 +5,7 @@ import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock, RefreshCw, 
 import { useAuthStore } from '@/stores/auth'
 import { useRecibosStore } from '@/stores/recibos'
 import { api } from '@/services/api'
+import { roundUpToHundred } from '@/utils/money'
 import type { PlanInfo } from '@/stores/auth'
 import ReciboCard from '@/components/ReciboCard.vue'
 import BottomTabBar from '@/components/BottomTabBar.vue'
@@ -91,8 +92,7 @@ const totalPendingSinRedondeo = computed(() =>
     .reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0)
 )
 
-// Siempre se muestra redondeado hacia arriba a la centena (los últimos 2 dígitos en 00).
-const totalPending = computed(() => Math.ceil(totalPendingSinRedondeo.value / 100) * 100)
+const totalPending = computed(() => roundUpToHundred(totalPendingSinRedondeo.value))
 
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
@@ -139,7 +139,7 @@ function toggleSelect(id: string) {
 const selectedRecibos = computed(() => store.recibos.filter(r => selectedIds.value.has(r.id)))
 
 const selectedTotal = computed(() =>
-  selectedRecibos.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0)
+  roundUpToHundred(selectedRecibos.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0))
 )
 
 function goToMultiPayment() {
