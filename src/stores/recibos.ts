@@ -270,6 +270,35 @@ export const useRecibosStore = defineStore('recibos', () => {
     await fetchRecibos()
   }
 
+  async function requestPaymentMultiple(
+    items: { id: string; valorRecibo: number; comision: number }[],
+    file: File,
+  ): Promise<void> {
+    const auth = useAuthStore()
+
+    const formData = new FormData()
+    formData.append('archivo', file)
+    const { url } = await api.upload<{ url: string }>('/upload/comprobante', formData, auth.token)
+
+    await Promise.all(
+      items.map(({ id, valorRecibo, comision }) => {
+        const valorTotal = valorRecibo + comision
+        return Promise.all([
+          api.post('/historial-pago-recibos', {
+            idRecibo: Number(id),
+            valorRecibo,
+            comision,
+            valorTotal,
+            pagado: 0,
+            urlComprobante: url,
+          }, auth.token),
+          api.put(`/recibos/${id}`, { idEstadoRecibo: 4 }, auth.token),
+        ])
+      }),
+    )
+    await fetchRecibos()
+  }
+
   function updateRecibo(id: string, updates: Partial<Recibo>) {
     const index = recibos.value.findIndex(r => r.id === id)
     if (index !== -1) recibos.value[index] = { ...recibos.value[index], ...updates }
@@ -294,7 +323,7 @@ export const useRecibosStore = defineStore('recibos', () => {
 
   return {
     recibos, history, loading, loadingHistory,
-    fetchRecibos, fetchHistory, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo, markAsPaid, requestPayment,
+    fetchRecibos, fetchHistory, createRecibo, getReciboById, addRecibo, updateRecibo, renameRecibo, markAsPaid, requestPayment, requestPaymentMultiple,
     serviceLabels, serviceIcons, serviceColors,
   }
 })

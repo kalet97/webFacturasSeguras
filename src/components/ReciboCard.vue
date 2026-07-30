@@ -1,17 +1,34 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronRight } from 'lucide-vue-next'
+import { ChevronRight, Check } from 'lucide-vue-next'
 import type { Recibo } from '@/stores/recibos'
 import { useRecibosStore } from '@/stores/recibos'
 import PaymentStatus from './PaymentStatus.vue'
 
 interface Props {
   recibo: Recibo
+  selectionMode?: boolean
+  selected?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  selectionMode: false,
+  selected: false,
+})
+const emit = defineEmits<{ toggle: [id: string] }>()
 const router = useRouter()
 const store = useRecibosStore()
+
+const payable = computed(() => ['pending', 'soon', 'overdue'].includes(props.recibo.status))
+
+function handleClick() {
+  if (props.selectionMode) {
+    if (payable.value) emit('toggle', props.recibo.id)
+    return
+  }
+  router.push(`/recibos/${props.recibo.id}`)
+}
 
 function formatCurrency(value?: number) {
   if (!value) return '—'
@@ -37,14 +54,27 @@ const daysColor: Record<string, string> = {
 
 <template>
   <button
-    @click="router.push(`/recibos/${props.recibo.id}`)"
+    @click="handleClick"
     :class="[
       'card w-full text-left hover:shadow-card-hover transition-shadow duration-200 active:scale-[0.99] overflow-hidden',
       props.recibo.status === 'processing' ? 'ring-2 ring-violet-300' : '',
       props.recibo.status === 'reviewing'  ? 'ring-2 ring-amber-300'  : '',
+      props.selectionMode && !payable ? 'opacity-50' : '',
     ]"
   >
     <div class="flex items-center gap-3">
+      <div v-if="props.selectionMode" class="shrink-0">
+        <div
+          :class="[
+            'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors',
+            !payable ? 'border-slate-200 bg-slate-100'
+              : props.selected ? 'bg-primary-600 border-primary-600' : 'border-slate-300',
+          ]"
+        >
+          <Check v-if="props.selected" class="w-3.5 h-3.5 text-white" />
+        </div>
+      </div>
+
       <div
         :class="['w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shrink-0', store.serviceColors[props.recibo.serviceType]]"
       >
@@ -71,7 +101,7 @@ const daysColor: Record<string, string> = {
         </p>
       </div>
 
-      <ChevronRight class="w-4 h-4 text-slate-300 shrink-0" />
+      <ChevronRight v-if="!props.selectionMode" class="w-4 h-4 text-slate-300 shrink-0" />
     </div>
 
     <!-- Banner informativo para estado processing -->

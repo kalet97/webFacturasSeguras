@@ -15,8 +15,21 @@ const router = useRouter()
 const store = useRecibosStore()
 const auth = useAuthStore()
 
-const id = route.params.id as string
-const recibo = computed(() => store.getReciboById(id))
+const ids = computed(() => String(route.query.ids ?? '').split(',').filter(Boolean))
+
+const items = computed(() => {
+  return ids.value
+    .map(id => store.getReciboById(id))
+    .filter((r): r is NonNullable<typeof r> => !!r)
+    .map(recibo => {
+      const valorRecibo = recibo.amount ?? 0
+      const comision = calcComision(valorRecibo, auth.user?.plan)
+      return { recibo, valorRecibo, comision, total: valorRecibo + comision }
+    })
+})
+
+const commissionTotal = computed(() => items.value.reduce((s, i) => s + i.comision, 0))
+const total = computed(() => items.value.reduce((s, i) => s + i.total, 0))
 
 const nequiNumber  = ref<string | null>(null)
 const nequiTitular = ref<string | null>(null)
@@ -24,7 +37,7 @@ const llaveValue   = ref<string | null>(null)
 const llaveTitular = ref<string | null>(null)
 
 onMounted(async () => {
-  if (!recibo.value) {
+  if (ids.value.some(id => !store.getReciboById(id))) {
     await store.fetchRecibos().catch(() => {})
   }
 
@@ -56,9 +69,6 @@ function copyValue(field: 'nequi' | 'llave', value: string | null) {
   })
 }
 
-const commission = computed(() => calcComision(recibo.value?.amount ?? 0, auth.user?.plan))
-const total = computed(() => (recibo.value?.amount ?? 0) + commission.value)
-
 const fileRef = ref<HTMLInputElement | null>(null)
 const uploadedFile = ref<File | null>(null)
 const uploadedFileName = ref<string | null>(null)
@@ -82,7 +92,10 @@ async function confirmPayment() {
   if (!uploadedFile.value) return
   loading.value = true
   try {
-    await store.requestPayment(id, recibo.value?.amount ?? 0, commission.value, uploadedFile.value)
+    await store.requestPaymentMultiple(
+      items.value.map(i => ({ id: i.recibo.id, valorRecibo: i.valorRecibo, comision: i.comision })),
+      uploadedFile.value,
+    )
     showConfirm.value = false
     submitted.value = true
   } finally {
@@ -95,33 +108,42 @@ async function confirmPayment() {
   <div class="screen">
     <AppHeader title="Solicitar pago" />
 
-    <div v-if="!recibo" class="flex-1 flex items-center justify-center">
-      <p class="text-slate-400">Recibo no encontrado</p>
+    <div v-if="items.length === 0" class="flex-1 flex items-center justify-center">
+      <p class="text-slate-400">No hay recibos seleccionados</p>
     </div>
 
     <div v-else-if="!submitted" class="flex-1 overflow-y-auto px-4 pb-8">
       <div class="card mb-4">
-        <div class="flex items-center gap-3 mb-4">
-          <div :class="['w-11 h-11 rounded-xl flex items-center justify-center text-2xl', store.serviceColors[recibo?.serviceType ?? 'energia']]">
-            {{ store.serviceIcons[recibo?.serviceType ?? 'energia'] }}
-          </div>
-          <div>
-            <p class="font-semibold text-slate-800">{{ recibo?.company }}</p>
-            <p class="text-sm text-slate-500">{{ store.serviceLabels[recibo?.serviceType ?? 'energia'] }}</p>
+        <h3 class="font-bold text-slate-800 mb-3">{{ items.length }} recibo{{ items.length !== 1 ? 's' : '' }} seleccionado{{ items.length !== 1 ? 's' : '' }}</h3>
+
+        <div class="flex flex-col gap-2 mb-3">
+          <div
+            v-for="i in items"
+            :key="i.recibo.id"
+            class="flex items-center gap-3 py-2 border-b border-slate-50 last:border-b-0"
+          >
+            <div :class="['w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0', store.serviceColors[i.recibo.serviceType]]">
+              {{ store.serviceIcons[i.recibo.serviceType] }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-slate-800 text-sm truncate">{{ i.recibo.company }}</p>
+              <p v-if="i.comision > 0" class="text-xs text-warning-600">+ {{ formatCurrency(i.comision) }} cargo 4x1000</p>
+            </div>
+            <p class="font-semibold text-slate-800 text-sm shrink-0">{{ formatCurrency(i.total) }}</p>
           </div>
         </div>
 
         <div class="space-y-3">
           <div class="flex justify-between items-center py-2 border-b border-slate-50">
-            <span class="text-sm text-slate-600">Valor del recibo</span>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(recibo?.amount ?? 0) }}</span>
+            <span class="text-sm text-slate-600">Subtotal recibos</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(total - commissionTotal) }}</span>
           </div>
-          <div v-if="commission > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
+          <div v-if="commissionTotal > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <div class="flex items-center gap-1.5">
               <span class="text-sm text-slate-600">Cargo adicional (4x1000)</span>
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(commission) }}</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(commissionTotal) }}</span>
           </div>
           <div class="flex justify-between items-center py-2">
             <span class="font-bold text-slate-800">Total a pagar</span>
@@ -132,38 +154,6 @@ async function confirmPayment() {
 
       <div class="card mb-4">
         <h3 class="font-bold text-slate-800 mb-1">Paga por Nequi</h3>
-        <!-- <p class="text-xs text-slate-500 mb-4">Escanea el código QR o transfiere al número</p>
-        <div class="flex justify-center mb-4">
-          <div class="w-40 h-40 bg-slate-100 rounded-2xl flex items-center justify-center">
-            <svg viewBox="0 0 100 100" class="w-32 h-32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="5" y="5" width="30" height="30" rx="2" fill="#1e293b"/>
-              <rect x="10" y="10" width="20" height="20" rx="1" fill="white"/>
-              <rect x="13" y="13" width="14" height="14" rx="1" fill="#1e293b"/>
-              <rect x="65" y="5" width="30" height="30" rx="2" fill="#1e293b"/>
-              <rect x="70" y="10" width="20" height="20" rx="1" fill="white"/>
-              <rect x="73" y="13" width="14" height="14" rx="1" fill="#1e293b"/>
-              <rect x="5" y="65" width="30" height="30" rx="2" fill="#1e293b"/>
-              <rect x="10" y="70" width="20" height="20" rx="1" fill="white"/>
-              <rect x="13" y="73" width="14" height="14" rx="1" fill="#1e293b"/>
-              <rect x="43" y="5" width="6" height="6" fill="#1e293b"/>
-              <rect x="53" y="5" width="6" height="6" fill="#1e293b"/>
-              <rect x="43" y="15" width="6" height="6" fill="#1e293b"/>
-              <rect x="53" y="25" width="6" height="6" fill="#1e293b"/>
-              <rect x="43" y="35" width="6" height="6" fill="#1e293b"/>
-              <rect x="65" y="43" width="6" height="6" fill="#1e293b"/>
-              <rect x="75" y="43" width="6" height="6" fill="#1e293b"/>
-              <rect x="85" y="53" width="6" height="6" fill="#1e293b"/>
-              <rect x="65" y="63" width="6" height="6" fill="#1e293b"/>
-              <rect x="75" y="73" width="6" height="6" fill="#1e293b"/>
-              <rect x="85" y="83" width="6" height="6" fill="#1e293b"/>
-              <rect x="43" y="53" width="6" height="6" fill="#1e293b"/>
-              <rect x="43" y="63" width="6" height="6" fill="#1e293b"/>
-              <rect x="53" y="73" width="6" height="6" fill="#1e293b"/>
-              <rect x="43" y="83" width="6" height="6" fill="#1e293b"/>
-              <rect x="53" y="83" width="6" height="6" fill="#1e293b"/>
-            </svg>
-          </div>
-        </div> -->
         <div class="bg-primary-50 rounded-2xl p-3 text-center">
           <p class="text-xs text-slate-500">Número Nequi</p>
           <div v-if="nequiNumber" class="flex items-center justify-center gap-2 mt-0.5">
@@ -213,7 +203,7 @@ async function confirmPayment() {
 
       <div class="card mb-6">
         <h3 class="font-bold text-slate-800 mb-1">Subir comprobante</h3>
-        <p class="text-xs text-slate-500 mb-4">Adjunta el pantallazo del pago para confirmar</p>
+        <p class="text-xs text-slate-500 mb-4">Adjunta el pantallazo del pago único que cubre todos los recibos seleccionados</p>
 
         <input ref="fileRef" type="file" accept="image/*" class="hidden" @change="handleFileChange" />
 
@@ -247,7 +237,7 @@ async function confirmPayment() {
       </div>
       <div>
         <h2 class="text-xl font-bold text-slate-800">¡Solicitud enviada!</h2>
-        <p class="text-slate-500 mt-2 text-sm">Tu solicitud de pago fue recibida. Te notificaremos cuando sea procesada.</p>
+        <p class="text-slate-500 mt-2 text-sm">Tu solicitud de pago de {{ items.length }} recibo{{ items.length !== 1 ? 's' : '' }} fue recibida. Te notificaremos cuando sea procesada.</p>
       </div>
       <AppButton @click="router.replace('/dashboard')" class="mt-4">
         Volver al inicio
@@ -257,7 +247,7 @@ async function confirmPayment() {
     <ConfirmationModal
       :open="showConfirm"
       title="Confirmar solicitud"
-      :message="`Se solicitará el pago de ${formatCurrency(total)} incluida la comisión del servicio.`"
+      :message="`Se solicitará el pago de ${formatCurrency(total)} para ${items.length} recibo${items.length !== 1 ? 's' : ''}, incluida la comisión del servicio.`"
       confirm-label="Confirmar pago"
       :loading="loading"
       @confirm="confirmPayment"

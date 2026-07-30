@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/recibos/add',   name: 'add-recibo',    component: () => import('@/views/AddReciboView.vue') },
     { path: '/recibos/:id',   name: 'recibo-detail', component: () => import('@/views/ReciboDetailView.vue') },
     { path: '/recibos/:id/payment', name: 'request-payment', component: () => import('@/views/RequestPaymentView.vue') },
+    { path: '/recibos/pagar-multiple', name: 'request-payment-multiple', component: () => import('@/views/RequestPaymentMultipleView.vue') },
     { path: '/history',       name: 'history',       component: () => import('@/views/HistoryView.vue') },
     { path: '/profile',       name: 'profile',       component: () => import('@/views/ProfileView.vue') },
     { path: '/profile/edit',  name: 'edit-profile',  component: () => import('@/views/EditProfileView.vue') },

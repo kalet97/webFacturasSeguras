@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock, RefreshCw } from 'lucide-vue-next'
+import { Plus, Bell, TrendingDown, X, Check, ArrowUp, CalendarClock, RefreshCw, CheckSquare } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useRecibosStore } from '@/stores/recibos'
 import { api } from '@/services/api'
@@ -122,6 +122,30 @@ const mostrarAvisoSuscripcion = computed(() => {
   const d = diasParaVencerSuscripcion.value
   return d !== null && d <= 5
 })
+
+const selectionMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value
+  selectedIds.value.clear()
+}
+
+function toggleSelect(id: string) {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+}
+
+const selectedRecibos = computed(() => store.recibos.filter(r => selectedIds.value.has(r.id)))
+
+const selectedTotal = computed(() =>
+  selectedRecibos.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0)
+)
+
+function goToMultiPayment() {
+  if (selectedIds.value.size === 0) return
+  router.push({ path: '/recibos/pagar-multiple', query: { ids: Array.from(selectedIds.value).join(',') } })
+}
 </script>
 
 <template>
@@ -218,17 +242,35 @@ const mostrarAvisoSuscripcion = computed(() => {
 
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-bold text-slate-800">Mis recibos</h3>
-        <button
-          @click="handleAddRecibo"
-          class="flex items-center gap-1.5 text-primary-600 text-sm font-medium"
-        >
-          <Plus class="w-4 h-4" />
-          Agregar
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            v-if="store.recibos.length > 0"
+            @click="toggleSelectionMode"
+            class="flex items-center gap-1.5 text-primary-600 text-sm font-medium"
+          >
+            <CheckSquare class="w-4 h-4" />
+            {{ selectionMode ? 'Cancelar' : 'Pagar recibos' }}
+          </button>
+          <button
+            v-if="!selectionMode"
+            @click="handleAddRecibo"
+            class="flex items-center gap-1.5 text-primary-600 text-sm font-medium"
+          >
+            <Plus class="w-4 h-4" />
+            Agregar
+          </button>
+        </div>
       </div>
 
       <div class="flex flex-col gap-3 mb-4">
-        <ReciboCard v-for="r in sortedRecibos" :key="r.id" :recibo="r" />
+        <ReciboCard
+          v-for="r in sortedRecibos"
+          :key="r.id"
+          :recibo="r"
+          :selection-mode="selectionMode"
+          :selected="selectedIds.has(r.id)"
+          @toggle="toggleSelect"
+        />
       </div>
 
       <div v-if="store.recibos.length === 0" class="card text-center py-10">
@@ -251,6 +293,23 @@ const mostrarAvisoSuscripcion = computed(() => {
         </svg>
       </a>
     </div>
+
+    <Transition name="modal">
+      <div v-if="selectionMode && selectedIds.size > 0" class="fixed bottom-20 left-0 right-0 z-40 px-4">
+        <div class="max-w-[390px] mx-auto bg-primary-600 rounded-2xl shadow-lg p-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-white/80 text-xs">{{ selectedIds.size }} recibo{{ selectedIds.size !== 1 ? 's' : '' }} seleccionado{{ selectedIds.size !== 1 ? 's' : '' }}</p>
+            <p class="text-white font-bold">{{ formatCurrency(selectedTotal) }}</p>
+          </div>
+          <button
+            @click="goToMultiPayment"
+            class="bg-white text-primary-600 font-semibold text-sm px-4 py-2.5 rounded-xl active:scale-[0.98] transition-transform"
+          >
+            Pagar
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <BottomTabBar />
 
