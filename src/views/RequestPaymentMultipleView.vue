@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Upload, CheckCircle, Info, Copy } from 'lucide-vue-next'
+import { Upload, CheckCircle, Info, Copy, ZoomIn } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -10,6 +10,7 @@ import { roundUpToHundred } from '@/utils/money'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
+import ImageLightbox from '@/components/ImageLightbox.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -75,6 +76,8 @@ function copyValue(field: 'nequi' | 'llave', value: string | null) {
 const fileRef = ref<HTMLInputElement | null>(null)
 const uploadedFile = ref<File | null>(null)
 const uploadedFileName = ref<string | null>(null)
+const previewUrl = ref<string | null>(null)
+const lightboxSrc = ref<string | null>(null)
 const showConfirm = ref(false)
 const loading = ref(false)
 const submitted = ref(false)
@@ -86,10 +89,16 @@ function formatCurrency(v: number) {
 function handleFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (file) {
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     uploadedFile.value = file
     uploadedFileName.value = file.name
+    previewUrl.value = URL.createObjectURL(file)
   }
 }
+
+onBeforeUnmount(() => {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+})
 
 async function confirmPayment() {
   if (!uploadedFile.value) return
@@ -214,21 +223,33 @@ async function confirmPayment() {
 
         <input ref="fileRef" type="file" accept="image/*" class="hidden" @change="handleFileChange" />
 
+        <div v-if="previewUrl" class="flex items-center gap-3 border-2 border-success bg-success-50 rounded-2xl p-3">
+          <button
+            type="button"
+            @click="lightboxSrc = previewUrl"
+            class="relative w-16 h-16 rounded-xl overflow-hidden border border-success-100 shrink-0 active:scale-95 transition-transform"
+          >
+            <img :src="previewUrl" alt="Comprobante" class="w-full h-full object-cover" />
+            <div class="absolute inset-0 bg-black/0 active:bg-black/10 flex items-center justify-center">
+              <ZoomIn class="w-4 h-4 text-white opacity-0 group-active:opacity-100 drop-shadow" />
+            </div>
+          </button>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-success truncate">{{ uploadedFileName }}</p>
+            <button type="button" @click="fileRef?.click()" class="text-xs text-primary-600 font-medium mt-0.5">
+              Cambiar imagen
+            </button>
+          </div>
+        </div>
+
         <button
+          v-else
           @click="fileRef?.click()"
-          :class="[
-            'w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 transition-colors',
-            uploadedFileName
-              ? 'border-success bg-success-50'
-              : 'border-slate-200 bg-slate-50 hover:border-primary-300 hover:bg-primary-50',
-          ]"
+          class="w-full border-2 border-dashed rounded-2xl py-6 flex flex-col items-center gap-2 transition-colors border-slate-200 bg-slate-50 hover:border-primary-300 hover:bg-primary-50"
         >
-          <CheckCircle v-if="uploadedFileName" class="w-8 h-8 text-success" />
-          <Upload v-else class="w-8 h-8 text-slate-400" />
-          <p :class="['text-sm font-medium', uploadedFileName ? 'text-success' : 'text-slate-500']">
-            {{ uploadedFileName || 'Toca para subir imagen' }}
-          </p>
-          <p v-if="!uploadedFileName" class="text-xs text-slate-400">JPG, PNG hasta 10MB</p>
+          <Upload class="w-8 h-8 text-slate-400" />
+          <p class="text-sm font-medium text-slate-500">Toca para subir imagen</p>
+          <p class="text-xs text-slate-400">JPG, PNG hasta 10MB</p>
         </button>
       </div>
 
@@ -260,5 +281,7 @@ async function confirmPayment() {
       @confirm="confirmPayment"
       @cancel="showConfirm = false"
     />
+
+    <ImageLightbox :src="lightboxSrc" @close="lightboxSrc = null" />
   </div>
 </template>

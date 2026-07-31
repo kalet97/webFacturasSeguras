@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X, ArrowUpFromLine, Clock, ZoomIn } from 'lucide-vue-next'
+import { MapPin, Hash, Calendar, Edit2, CreditCard, Check, X, ArrowUpFromLine, Clock, ZoomIn, ChevronDown } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
@@ -9,6 +9,7 @@ import AppHeader from '@/components/AppHeader.vue'
 import PaymentStatus from '@/components/PaymentStatus.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
+import ImageLightbox from '@/components/ImageLightbox.vue'
 
 const route  = useRoute()
 const router = useRouter()
@@ -33,6 +34,8 @@ interface Transaccion {
 
 const transacciones     = ref<Transaccion[]>([])
 const loadingTransacc   = ref(false)
+const historialOpen     = ref(false)
+const expandedTransacc  = ref<number | null>(null)
 
 onMounted(async () => {
   loadingTransacc.value = true
@@ -41,139 +44,31 @@ onMounted(async () => {
       `/historial-pago-recibos?idRecibo=${id}`,
       auth.token,
     )
+    expandedTransacc.value = transacciones.value[0]?.idHistorialPagoRecibo ?? null
   } finally {
     loadingTransacc.value = false
   }
 })
+
+function toggleHistorial() {
+  historialOpen.value = !historialOpen.value
+}
+
+function toggleTransaccion(idHistorialPagoRecibo: number) {
+  expandedTransacc.value = expandedTransacc.value === idHistorialPagoRecibo ? null : idHistorialPagoRecibo
+}
 
 const showPayModal  = ref(false)
 const markingPaid   = ref(false)
 const editingName   = ref(false)
 
 const lightboxSrc = ref<string | null>(null)
-const zoom        = ref(1)
-const translateX  = ref(0)
-const translateY  = ref(0)
-const isDragging  = ref(false)
-const isPinching  = ref(false)
-
-const MIN_ZOOM = 1
-const MAX_ZOOM = 4
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, v))
-}
-
-function resetZoom() {
-  zoom.value = 1
-  translateX.value = 0
-  translateY.value = 0
-}
-
-function clampTranslate() {
-  const maxX = (window.innerWidth * (zoom.value - 1)) / 2 + 60
-  const maxY = (window.innerHeight * (zoom.value - 1)) / 2 + 60
-  translateX.value = clamp(translateX.value, -maxX, maxX)
-  translateY.value = clamp(translateY.value, -maxY, maxY)
-}
 
 function openLightbox(url: string) {
-  resetZoom()
   lightboxSrc.value = url
 }
 function closeLightbox() { lightboxSrc.value = null }
 
-function toggleZoom() {
-  if (zoom.value > 1) {
-    resetZoom()
-  } else {
-    zoom.value = 2.5
-    translateX.value = 0
-    translateY.value = 0
-  }
-}
-
-// --- Touch: pinch-to-zoom + drag-to-pan ---
-let pinchStartDistance = 0
-let pinchStartZoom     = 1
-let dragOrigin         = { x: 0, y: 0 }
-let lastTapTime        = 0
-
-function touchDistance(t1: Touch, t2: Touch) {
-  const dx = t1.clientX - t2.clientX
-  const dy = t1.clientY - t2.clientY
-  return Math.hypot(dx, dy)
-}
-
-function onTouchStart(e: TouchEvent) {
-  if (e.touches.length === 2) {
-    isPinching.value = true
-    pinchStartDistance = touchDistance(e.touches[0], e.touches[1])
-    pinchStartZoom = zoom.value
-  } else if (e.touches.length === 1) {
-    const now = Date.now()
-    if (now - lastTapTime < 300) {
-      lastTapTime = 0
-      toggleZoom()
-      return
-    }
-    lastTapTime = now
-    if (zoom.value > 1) {
-      isDragging.value = true
-      dragOrigin = { x: e.touches[0].clientX - translateX.value, y: e.touches[0].clientY - translateY.value }
-    }
-  }
-}
-
-function onTouchMove(e: TouchEvent) {
-  if (isPinching.value && e.touches.length === 2) {
-    e.preventDefault()
-    const dist = touchDistance(e.touches[0], e.touches[1])
-    zoom.value = clamp(pinchStartZoom * (dist / pinchStartDistance), MIN_ZOOM, MAX_ZOOM)
-  } else if (isDragging.value && e.touches.length === 1) {
-    e.preventDefault()
-    translateX.value = e.touches[0].clientX - dragOrigin.x
-    translateY.value = e.touches[0].clientY - dragOrigin.y
-  }
-}
-
-function onTouchEnd(e: TouchEvent) {
-  if (e.touches.length < 2) isPinching.value = false
-  if (e.touches.length === 0) {
-    isDragging.value = false
-    if (zoom.value <= 1) resetZoom()
-    else clampTranslate()
-  }
-}
-
-// --- Desktop: wheel-to-zoom + drag-to-pan + double-click ---
-function onWheel(e: WheelEvent) {
-  const delta = -e.deltaY * 0.01
-  zoom.value = clamp(zoom.value + delta, MIN_ZOOM, MAX_ZOOM)
-  if (zoom.value <= 1) resetZoom()
-  else clampTranslate()
-}
-
-function onMouseMove(e: MouseEvent) {
-  if (!isDragging.value) return
-  translateX.value = e.clientX - dragOrigin.x
-  translateY.value = e.clientY - dragOrigin.y
-}
-
-function onMouseUp() {
-  isDragging.value = false
-  clampTranslate()
-  window.removeEventListener('mousemove', onMouseMove)
-  window.removeEventListener('mouseup', onMouseUp)
-}
-
-function onMouseDown(e: MouseEvent) {
-  if (zoom.value <= 1) return
-  isDragging.value = true
-  dragOrigin = { x: e.clientX - translateX.value, y: e.clientY - translateY.value }
-  window.addEventListener('mousemove', onMouseMove)
-  window.addEventListener('mouseup', onMouseUp)
-}
 const nameInput     = ref('')
 const savingName    = ref(false)
 
@@ -322,90 +217,119 @@ async function handleMarkPaid() {
       </div>
 
       <div class="card mb-4">
-        <h3 class="font-bold text-slate-800 mb-4">Historial de transacciones</h3>
+        <button type="button" class="w-full flex items-center justify-between gap-2" @click="toggleHistorial">
+          <h3 class="font-bold text-slate-800">Historial de transacciones</h3>
+          <ChevronDown :class="['w-5 h-5 text-slate-400 transition-transform duration-200', historialOpen ? 'rotate-180' : '']" />
+        </button>
 
-        <div v-if="loadingTransacc" class="flex justify-center py-6">
-          <div class="w-6 h-6 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-        </div>
-
-        <div v-else-if="transacciones.length === 0" class="text-center py-6">
-          <p class="text-sm text-slate-400">Sin transacciones registradas</p>
-        </div>
-
-        <div v-else class="flex flex-col gap-4">
-          <div
-            v-for="(t, i) in transacciones"
-            :key="t.idHistorialPagoRecibo"
-            class="flex gap-3 relative"
-          >
-            <!-- Línea conectora -->
-            <div class="flex flex-col items-center shrink-0">
-              <div :class="['w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.pagado ? 'bg-success-50' : 'bg-violet-50']">
-                <component :is="t.pagado ? ArrowUpFromLine : Clock" :class="['w-4 h-4', t.pagado ? 'text-success' : 'text-violet-500']" />
-              </div>
-              <div v-if="i < transacciones.length - 1" class="w-px flex-1 bg-slate-100 mt-1 min-h-[16px]" />
+        <div
+          class="grid transition-[grid-template-rows] duration-300 ease-in-out"
+          :class="historialOpen ? 'grid-rows-[1fr] mt-4' : 'grid-rows-[0fr]'"
+        >
+          <div class="overflow-hidden">
+            <div v-if="loadingTransacc" class="flex justify-center py-6">
+              <div class="w-6 h-6 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
             </div>
 
-            <div class="flex-1 pb-1">
-              <div class="flex items-center justify-between gap-2">
-                <p class="text-sm font-semibold text-slate-800">
-                  {{ t.idUsuario === null ? 'Pago directo' : 'Pago por encargo' }}
-                </p>
-                <span :class="['text-xs font-medium px-2 py-0.5 rounded-full', t.pagado ? 'bg-success-50 text-success-600' : 'bg-violet-50 text-violet-600']">
-                  {{ t.pagado ? 'Completado' : 'En trámite' }}
-                </span>
-              </div>
+            <div v-else-if="transacciones.length === 0" class="text-center py-6">
+              <p class="text-sm text-slate-400">Sin transacciones registradas</p>
+            </div>
 
-              <div class="mt-1.5 bg-slate-50 rounded-xl px-3 py-2 space-y-1">
-                <div class="flex justify-between text-xs">
-                  <span class="text-slate-400">Valor recibo</span>
-                  <span class="font-medium text-slate-700">{{ formatCurrency(t.valorRecibo) }}</span>
+            <div v-else class="flex flex-col gap-4">
+              <div
+                v-for="(t, i) in transacciones"
+                :key="t.idHistorialPagoRecibo"
+                class="flex gap-3 relative"
+              >
+                <!-- Línea conectora -->
+                <div class="flex flex-col items-center shrink-0">
+                  <div :class="['w-9 h-9 rounded-xl flex items-center justify-center shrink-0', t.pagado ? 'bg-success-50' : 'bg-violet-50']">
+                    <component :is="t.pagado ? ArrowUpFromLine : Clock" :class="['w-4 h-4', t.pagado ? 'text-success' : 'text-violet-500']" />
+                  </div>
+                  <div v-if="i < transacciones.length - 1" class="w-px flex-1 bg-slate-100 mt-1 min-h-[16px]" />
                 </div>
-                <template v-if="t.comision">
-                  <div class="flex justify-between text-xs">
-                    <span class="text-slate-400">Comisión</span>
-                    <span class="font-medium text-slate-700">{{ formatCurrency(t.comision) }}</span>
-                  </div>
-                  <div class="flex justify-between text-xs border-t border-slate-100 pt-1">
-                    <span class="text-slate-500 font-medium">Total</span>
-                    <span class="font-bold text-slate-800">{{ formatCurrency(t.valorTotal) }}</span>
-                  </div>
-                </template>
-              </div>
 
-              <p class="text-xs text-slate-400 mt-1.5">
-                Solicitado: {{ t.fechaSolicitud ? formatDate(t.fechaSolicitud) : '—' }}
-                <template v-if="t.pagado && t.fechaPago">
-                  · Pagado: {{ formatDate(t.fechaPago) }}
-                </template>
-              </p>
-
-              <!-- Soportes de pago -->
-              <div v-if="t.urlComprobante || t.urlComprobanteRecibo" class="flex gap-2.5 mt-3">
-                <!-- Comprobante del cliente (transferencia a Recibo Seguro) -->
-                <div v-if="t.urlComprobante" class="flex flex-col items-center gap-1">
+                <div class="flex-1 pb-1">
                   <button
-                    @click="openLightbox(t.urlComprobante)"
-                    class="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 active:scale-95 transition-transform"
+                    type="button"
+                    class="w-full flex items-center justify-between gap-2 text-left"
+                    @click="toggleTransaccion(t.idHistorialPagoRecibo)"
                   >
-                    <img :src="t.urlComprobante" alt="Comprobante" class="w-full h-full object-cover" />
-                    <div class="absolute inset-0 bg-black/0 active:bg-black/10 flex items-center justify-center">
-                      <ZoomIn class="w-4 h-4 text-white opacity-0 group-active:opacity-100 drop-shadow" />
+                    <span class="flex items-center gap-1.5 min-w-0">
+                      <p class="text-sm font-semibold text-slate-800 truncate">
+                        {{ t.idUsuario === null ? 'Pago directo' : 'Pago por encargo' }}
+                      </p>
+                      <span :class="['shrink-0 text-xs font-medium px-2 py-0.5 rounded-full', t.pagado ? 'bg-success-50 text-success-600' : 'bg-violet-50 text-violet-600']">
+                        {{ t.pagado ? 'Completado' : 'En trámite' }}
+                      </span>
+                    </span>
+                    <span class="flex items-center gap-1.5 shrink-0">
+                      <span class="text-xs font-semibold text-slate-600">{{ formatCurrency(t.valorTotal || t.valorRecibo) }}</span>
+                      <ChevronDown
+                        :class="['w-4 h-4 text-slate-400 transition-transform duration-200', expandedTransacc === t.idHistorialPagoRecibo ? 'rotate-180' : '']"
+                      />
+                    </span>
+                  </button>
+
+                  <div
+                    class="grid transition-[grid-template-rows] duration-300 ease-in-out"
+                    :class="expandedTransacc === t.idHistorialPagoRecibo ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
+                  >
+                    <div class="overflow-hidden">
+                      <div class="mt-1.5 bg-slate-50 rounded-xl px-3 py-2 space-y-1">
+                        <div class="flex justify-between text-xs">
+                          <span class="text-slate-400">Valor recibo</span>
+                          <span class="font-medium text-slate-700">{{ formatCurrency(t.valorRecibo) }}</span>
+                        </div>
+                        <template v-if="t.comision">
+                          <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">Comisión</span>
+                            <span class="font-medium text-slate-700">{{ formatCurrency(t.comision) }}</span>
+                          </div>
+                          <div class="flex justify-between text-xs border-t border-slate-100 pt-1">
+                            <span class="text-slate-500 font-medium">Total</span>
+                            <span class="font-bold text-slate-800">{{ formatCurrency(t.valorTotal) }}</span>
+                          </div>
+                        </template>
+                      </div>
+
+                      <p class="text-xs text-slate-400 mt-1.5">
+                        Solicitado: {{ t.fechaSolicitud ? formatDate(t.fechaSolicitud) : '—' }}
+                        <template v-if="t.pagado && t.fechaPago">
+                          · Pagado: {{ formatDate(t.fechaPago) }}
+                        </template>
+                      </p>
+
+                      <!-- Soportes de pago -->
+                      <div v-if="t.urlComprobante || t.urlComprobanteRecibo" class="flex gap-2.5 mt-3">
+                        <!-- Comprobante del cliente (transferencia a Recibo Seguro) -->
+                        <div v-if="t.urlComprobante" class="flex flex-col items-center gap-1">
+                          <button
+                            @click="openLightbox(t.urlComprobante)"
+                            class="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 active:scale-95 transition-transform"
+                          >
+                            <img :src="t.urlComprobante" alt="Comprobante" class="w-full h-full object-cover" />
+                            <div class="absolute inset-0 bg-black/0 active:bg-black/10 flex items-center justify-center">
+                              <ZoomIn class="w-4 h-4 text-white opacity-0 group-active:opacity-100 drop-shadow" />
+                            </div>
+                          </button>
+                          <span class="text-[10px] text-slate-400 leading-none">Tu pago</span>
+                        </div>
+
+                        <!-- Comprobante del admin (recibo de la empresa) -->
+                        <div v-if="t.urlComprobanteRecibo" class="flex flex-col items-center gap-1">
+                          <button
+                            @click="openLightbox(t.urlComprobanteRecibo)"
+                            class="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-primary-200 active:scale-95 transition-transform"
+                          >
+                            <img :src="t.urlComprobanteRecibo" alt="Soporte de pago" class="w-full h-full object-cover" />
+                            <div class="absolute inset-0 bg-black/0 active:bg-black/10" />
+                          </button>
+                          <span class="text-[10px] text-primary-500 leading-none font-medium">Soporte</span>
+                        </div>
+                      </div>
                     </div>
-                  </button>
-                  <span class="text-[10px] text-slate-400 leading-none">Tu pago</span>
-                </div>
-
-                <!-- Comprobante del admin (recibo de la empresa) -->
-                <div v-if="t.urlComprobanteRecibo" class="flex flex-col items-center gap-1">
-                  <button
-                    @click="openLightbox(t.urlComprobanteRecibo)"
-                    class="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-primary-200 active:scale-95 transition-transform"
-                  >
-                    <img :src="t.urlComprobanteRecibo" alt="Soporte de pago" class="w-full h-full object-cover" />
-                    <div class="absolute inset-0 bg-black/0 active:bg-black/10" />
-                  </button>
-                  <span class="text-[10px] text-primary-500 leading-none font-medium">Soporte</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -458,58 +382,5 @@ async function handleMarkPaid() {
     <p class="text-slate-400">Recibo no encontrado</p>
   </div>
 
-  <!-- Lightbox fullscreen -->
-  <Teleport to="body">
-    <Transition name="lightbox">
-      <div
-        v-if="lightboxSrc"
-        class="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center overflow-hidden touch-none"
-        @click="closeLightbox"
-      >
-        <button
-          class="absolute top-4 right-4 z-10 w-10 h-10 bg-white/15 hover:bg-white/25 rounded-full flex items-center justify-center transition"
-          @click.stop="closeLightbox"
-        >
-          <X class="w-5 h-5 text-white" />
-        </button>
-        <img
-          :src="lightboxSrc"
-          class="max-w-full max-h-full object-contain p-4 select-none touch-none"
-          :style="{
-            transform: `translate(${translateX}px, ${translateY}px) scale(${zoom})`,
-            transition: isDragging || isPinching ? 'none' : 'transform 0.2s ease',
-            cursor: zoom > 1 ? 'grab' : 'zoom-in',
-          }"
-          alt="Soporte de pago"
-          draggable="false"
-          @click.stop
-          @touchstart="onTouchStart"
-          @touchmove="onTouchMove"
-          @touchend="onTouchEnd"
-          @mousedown.stop="onMouseDown"
-          @dblclick.stop="toggleZoom"
-          @wheel.stop.prevent="onWheel"
-        />
-      </div>
-    </Transition>
-  </Teleport>
+  <ImageLightbox :src="lightboxSrc" @close="closeLightbox" />
 </template>
-
-<style scoped>
-.lightbox-enter-active,
-.lightbox-leave-active {
-  transition: opacity 0.2s ease;
-}
-.lightbox-enter-active img,
-.lightbox-leave-active img {
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-.lightbox-enter-from,
-.lightbox-leave-to {
-  opacity: 0;
-}
-.lightbox-enter-from img {
-  transform: scale(0.92);
-  opacity: 0;
-}
-</style>
