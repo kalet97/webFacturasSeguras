@@ -111,11 +111,8 @@ export const useAuthStore = defineStore('auth', () => {
     telefonoSecundario?: number | null
     whatsapp?: number | null
     direccion?: string
-    idPlan: number
   }): Promise<void> {
-    const { idPlan, ...clienteData } = data
-    const cliente = await api.post<{ idCliente: number }>('/clientes', data)
-    // await api.post('/suscripciones', { idCliente: cliente.idCliente, idPlan })
+    await api.post<{ idCliente: number }>('/clientes', data)
     await login(String(data.cedula), data.clave)
   }
 

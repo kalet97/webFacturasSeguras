@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAdminAuthStore } from '@/stores/adminAuth'
-import { useRecibosStore } from '@/stores/recibos'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -62,19 +61,6 @@ router.beforeEach(async (to, _from, next) => {
 
   if (!to.meta.public && !auth.isAuthenticated) {
     return next('/login')
-  }
-
-  if (to.name === 'add-recibo' && auth.isAuthenticated) {
-    const plan = auth.user?.plan
-    if (plan?.maxFacturas != null) {
-      const recibosStore = useRecibosStore()
-      if (recibosStore.recibos.length === 0) {
-        await recibosStore.fetchRecibos().catch(() => {})
-      }
-      if (recibosStore.recibos.length >= plan.maxFacturas) {
-        return next('/dashboard')
-      }
-    }
   }
 
   next()

@@ -5,8 +5,8 @@ import { Upload, CheckCircle, Info, Copy, ZoomIn } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
-import { calcComision } from '@/utils/comision'
 import { roundUpToHundred } from '@/utils/money'
+import { UMBRAL_CARGO_ADICIONAL_DEFAULT } from '@/constants/parametrosGenerales'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
@@ -24,6 +24,7 @@ const nequiNumber  = ref<string | null>(null)
 const nequiTitular = ref<string | null>(null)
 const llaveValue   = ref<string | null>(null)
 const llaveTitular = ref<string | null>(null)
+const umbral       = ref<number>(UMBRAL_CARGO_ADICIONAL_DEFAULT)
 
 onMounted(async () => {
   if (!recibo.value) {
@@ -31,16 +32,20 @@ onMounted(async () => {
   }
 
   try {
-    const [numParam, titularParam, llaveParam, llaveTitularParam] = await Promise.all([
+    const [numParam, titularParam, llaveParam, llaveTitularParam, umbralParam] = await Promise.all([
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequi',        auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequiTitular', auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/llave',        auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/llaveTitular', auth.token),
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/umbralCargoAdicional', auth.token).catch(() => null),
     ])
     nequiNumber.value  = numParam?.valor  ?? null
     nequiTitular.value = titularParam?.valor ?? null
     llaveValue.value   = llaveParam?.valor ?? null
     llaveTitular.value = llaveTitularParam?.valor ?? null
+    if (umbralParam?.valor) {
+      umbral.value = Number(umbralParam.valor)
+    }
   } catch {
     // si falla, no se muestran los datos
   }
@@ -58,8 +63,12 @@ function copyValue(field: 'nequi' | 'llave', value: string | null) {
   })
 }
 
-const commission = computed(() => calcComision(recibo.value?.amount ?? 0, auth.user?.plan))
-const totalSinRedondeo = computed(() => (recibo.value?.amount ?? 0) + commission.value)
+const cargoAdicional = computed(() => {
+  const monto = recibo.value?.amount ?? 0
+  return monto > umbral.value ? Math.round((monto - umbral.value) * 0.004) : 0
+})
+const comisionFija = computed(() => 500)
+const totalSinRedondeo = computed(() => (recibo.value?.amount ?? 0) + comisionFija.value + cargoAdicional.value)
 const total = computed(() => roundUpToHundred(totalSinRedondeo.value))
 const redondeo = computed(() => total.value - totalSinRedondeo.value)
 
@@ -94,7 +103,7 @@ async function confirmPayment() {
   if (!uploadedFile.value) return
   loading.value = true
   try {
-    await store.requestPayment(id, recibo.value?.amount ?? 0, commission.value, uploadedFile.value)
+    await store.requestPayment(id, recibo.value?.amount ?? 0, cargoAdicional.value, comisionFija.value, uploadedFile.value)
     showConfirm.value = false
     submitted.value = true
   } finally {
@@ -128,12 +137,16 @@ async function confirmPayment() {
             <span class="text-sm text-slate-600">Valor del recibo</span>
             <span class="font-semibold text-slate-800">{{ formatCurrency(recibo?.amount ?? 0) }}</span>
           </div>
-          <div v-if="commission > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
+          <div class="flex justify-between items-center py-2 border-b border-slate-50">
+            <span class="text-sm text-slate-600">Comisión de servicio</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(comisionFija) }}</span>
+          </div>
+          <div v-if="cargoAdicional > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm text-slate-600">Cargo adicional (4x1000)</span>
+              <span class="text-sm text-slate-600">Cargo 4x1000</span>
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(commission) }}</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(cargoAdicional) }}</span>
           </div>
           <div v-if="redondeo > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <span class="text-sm text-slate-600">Redondeo</span>
@@ -285,7 +298,7 @@ async function confirmPayment() {
     <ConfirmationModal
       :open="showConfirm"
       title="Confirmar solicitud"
-      :message="`Se solicitará el pago de ${formatCurrency(total)} incluida la comisión del servicio.`"
+      :message="`Se solicitará el pago de ${formatCurrency(total)}, incluida la comisión de servicio y cargos adicionales.`"
       confirm-label="Confirmar pago"
       :loading="loading"
       @confirm="confirmPayment"

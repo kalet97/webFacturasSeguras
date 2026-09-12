@@ -2,6 +2,8 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/services/api'
+import { UMBRAL_CARGO_ADICIONAL_DEFAULT } from '@/constants/parametrosGenerales'
 import {
   Zap, Droplets, Flame, Wifi, Phone, Tv,
   Check, CheckCircle, XCircle, Bell, Shield, Clock, Users, Star,
@@ -10,9 +12,32 @@ import {
 const router = useRouter()
 const auth   = useAuthStore()
 
-onMounted(() => {
+const umbralCargoAdicional = ref(UMBRAL_CARGO_ADICIONAL_DEFAULT)
+
+function formatCOP(value: number): string {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+  }).format(value)
+}
+
+onMounted(async () => {
   if (auth.isAuthenticated) router.replace('/dashboard')
   window.addEventListener('scroll', onScroll)
+
+  // Cargar umbral desde el servidor (endpoint público, sin token)
+  try {
+    const response = await api.get('/parametros-generales/umbralCargoAdicional')
+    if (response?.valor) {
+      const parsed = parseInt(response.valor, 10)
+      if (!isNaN(parsed)) {
+        umbralCargoAdicional.value = parsed
+      }
+    }
+  } catch {
+    // Silencio — mantiene el default de UMBRAL_CARGO_ADICIONAL_DEFAULT
+  }
 })
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
@@ -60,52 +85,6 @@ const benefits = [
   { icon: Users,  title: 'Para toda la familia',         desc: 'Ideal para adultos mayores o personas con vida ocupada.' },
 ]
 
-const plans = [
-  {
-    name: 'Esencial',
-    price: '$7.900',
-    highlight: false,
-    features: [
-      'Hasta 5 facturas gestionadas',
-      'Valor máximo por factura: $150.000',
-      'Recordatorios por WhatsApp',
-      '5 llamadas al mes',
-      'Recolección del dinero: $4.000 por visita',
-      'Excedente de valor: cargo del 4x1000',
-    ],
-  },
-  {
-    name: 'Familiar',
-    price: '$14.900',
-    badge: 'Más popular',
-    highlight: true,
-    features: [
-      'Hasta 10 facturas gestionadas',
-      'Valor máximo por factura: $200.000',
-      'Recordatorios por WhatsApp',
-      'Llamadas ilimitadas',
-      'Prioridad en atención',
-      'Apoyo para programar pagos',
-      'Recolección del dinero: $4.000 por visita',
-      'Excedente de valor: cargo del 4x1000',
-    ],
-  },
-  {
-    name: 'Adulto Mayor',
-    price: '$24.900',
-    highlight: false,
-    features: [
-      'Hasta 20 facturas gestionadas',
-      'Valor máximo por factura: $300.000',
-      'Contacto con familiar autorizado',
-      'Gestión especial de vencimientos críticos',
-      '1 visita presencial para recoger el dinero',
-      'Recolección adicional: $4.000 por visita extra',
-      'Excedente de valor: cargo del 4x1000',
-    ],
-  },
-]
-
 const mockRecibos = [
   { initial: 'E', name: 'Energía EPM',   days: '3d',  status: 'Vence pronto', sbg: 'bg-warning-50',  stext: 'text-warning-600',  ibg: 'bg-warning-50',  itext: 'text-warning-600' },
   { initial: 'A', name: 'Acueducto',     days: '12d', status: 'Al día',       sbg: 'bg-success-50',  stext: 'text-success-600',  ibg: 'bg-success-50',  itext: 'text-success-600' },
@@ -139,10 +118,10 @@ const mockRecibos = [
             :class="scrolled ? 'text-gray-500 hover:text-gray-900' : 'text-white/70 hover:text-white'"
           >Cómo funciona</a>
           <a
-            href="#planes"
+            href="#tarifas"
             class="hidden sm:inline-block text-sm font-medium transition-colors duration-300"
             :class="scrolled ? 'text-gray-500 hover:text-gray-900' : 'text-white/70 hover:text-white'"
-          >Planes</a>
+          >Tarifas</a>
           <button
             @click="router.push('/login')"
             class="px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200"
@@ -379,59 +358,71 @@ const mockRecibos = [
       </div>
     </section>
 
-    <!-- ─── PLANES ─── -->
-    <section id="planes" class="py-20 bg-gradient-to-b from-gray-50 to-white scroll-mt-16">
+    <!-- ─── TARIFAS ─── -->
+    <section id="tarifas" class="py-20 bg-gradient-to-b from-gray-50 to-white scroll-mt-16">
       <div class="max-w-6xl mx-auto px-4 sm:px-6">
         <div class="text-center mb-14">
-          <p class="text-primary-600 font-bold text-sm uppercase tracking-widest mb-2">Planes</p>
-          <h2 class="text-3xl sm:text-4xl font-black text-gray-900">Sin letra pequeña</h2>
-          <p class="mt-3 text-gray-500 text-lg">Tres planes claros. Sabes exactamente lo que pagas cada mes.</p>
+          <p class="text-primary-600 font-bold text-sm uppercase tracking-widest mb-2">Tarifas</p>
+          <h2 class="text-3xl sm:text-4xl font-black text-gray-900">Paga solo lo que usas</h2>
+          <p class="mt-3 text-gray-500 text-lg">Sin mensualidades. Sin límites. Sin letra pequeña.</p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          <div
-            v-for="plan in plans"
-            :key="plan.name"
-            class="relative rounded-3xl p-8 border-2 transition-all"
-            :class="plan.highlight
-              ? 'bg-primary-600 border-primary-600 shadow-2xl shadow-primary-200'
-              : 'bg-white border-gray-200 shadow-sm'"
-          >
-            <div
-              v-if="plan.badge"
-              class="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap"
-            >{{ plan.badge }}</div>
 
-            <p class="font-bold text-xl" :class="plan.highlight ? 'text-white' : 'text-gray-900'">{{ plan.name }}</p>
-
-            <div class="flex items-end gap-1 mt-3 mb-6">
-              <span class="text-4xl font-black" :class="plan.highlight ? 'text-white' : 'text-gray-900'">{{ plan.price }}</span>
-              <span class="text-sm mb-1.5" :class="plan.highlight ? 'text-primary-200' : 'text-gray-400'">/mes</span>
+        <div class="max-w-md mx-auto">
+          <div class="rounded-3xl p-8 border-2 bg-white border-primary-200 shadow-2xl shadow-primary-100 transition-all hover:shadow-primary-200">
+            <!-- Precio principal -->
+            <div class="text-center mb-8">
+              <div class="text-5xl font-black text-gray-900 mb-2">
+                <span class="text-primary-600">$500</span>
+              </div>
+              <p class="text-gray-500 font-semibold">por cada factura gestionada</p>
             </div>
 
+            <!-- Explicación del cargo adicional -->
+            <div class="bg-primary-50 border border-primary-100 rounded-2xl p-5 mb-8">
+              <p class="text-sm text-gray-700 leading-relaxed">
+                <strong class="text-primary-700">Además:</strong> si la factura supera <span class="font-bold text-primary-700">{{ formatCOP(umbralCargoAdicional) }}</span>, cobras un <span class="font-bold">4x1000</span> solo sobre el excedente.
+              </p>
+              <p class="mt-3 text-xs text-gray-600">
+                <em>Ejemplo: factura de $200.000 = $500 + (70.000 × 0.4%) = $500 + $280 = <strong>$780</strong></em>
+              </p>
+            </div>
+
+            <!-- Beneficios -->
             <ul class="space-y-3 mb-8">
-              <li
-                v-for="f in plan.features"
-                :key="f"
-                class="flex items-start gap-2.5 text-sm"
-              >
-                <Check class="w-4 h-4 mt-0.5 flex-shrink-0" :class="plan.highlight ? 'text-primary-200' : 'text-success'" />
-                <span :class="plan.highlight ? 'text-primary-100' : 'text-gray-600'">{{ f }}</span>
+              <li class="flex items-start gap-2.5 text-sm">
+                <Check class="w-4 h-4 mt-0.5 flex-shrink-0 text-success" />
+                <span class="text-gray-600">Sin mensualidades</span>
+              </li>
+              <li class="flex items-start gap-2.5 text-sm">
+                <Check class="w-4 h-4 mt-0.5 flex-shrink-0 text-success" />
+                <span class="text-gray-600">Facturas ilimitadas</span>
+              </li>
+              <li class="flex items-start gap-2.5 text-sm">
+                <Check class="w-4 h-4 mt-0.5 flex-shrink-0 text-success" />
+                <span class="text-gray-600">Recordatorios por WhatsApp</span>
+              </li>
+              <li class="flex items-start gap-2.5 text-sm">
+                <Check class="w-4 h-4 mt-0.5 flex-shrink-0 text-success" />
+                <span class="text-gray-600">Pagamos por ti si lo solicitas</span>
+              </li>
+              <li class="flex items-start gap-2.5 text-sm">
+                <Check class="w-4 h-4 mt-0.5 flex-shrink-0 text-success" />
+                <span class="text-gray-600">Cancela cuando quieras</span>
               </li>
             </ul>
 
+            <!-- CTA Button -->
             <button
               @click="router.push('/register')"
-              class="w-full py-3 rounded-2xl font-bold text-sm transition-all"
-              :class="plan.highlight
-                ? 'bg-white text-primary-700 hover:bg-blue-50'
-                : 'bg-primary-600 text-white hover:bg-primary-700'"
+              class="w-full py-3 rounded-2xl font-bold text-base bg-primary-600 text-white hover:bg-primary-700 shadow-lg shadow-primary-200 hover:shadow-xl hover:-translate-y-0.5 transition-all mb-4"
             >
-              Empezar con {{ plan.name }}
+              Registrarme ahora
             </button>
           </div>
         </div>
-        <p class="text-center text-gray-400 text-sm mt-6">
-          Cancela en cualquier momento · Pago mensual por Nequi o transferencia bancaria
+
+        <p class="text-center text-gray-400 text-sm mt-8">
+          Sin tarjeta de crédito · Sin costos ocultos · Paga por Nequi o transferencia
         </p>
       </div>
     </section>

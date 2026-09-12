@@ -5,6 +5,7 @@ import { Hash, FileText, DollarSign, Calendar, AlertCircle, ChevronDown, Info, C
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
+import { UMBRAL_CARGO_ADICIONAL_DEFAULT } from '@/constants/parametrosGenerales'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 
@@ -23,6 +24,7 @@ interface EmpresaOption {
 const empresas        = ref<EmpresaOption[]>([])
 const loadingCatalogos = ref(true)
 const showTutorialModal = ref(false)
+const umbralCargoAdicional = ref(UMBRAL_CARGO_ADICIONAL_DEFAULT)
 
 const selectedEmpresa = computed(() =>
   empresas.value.find(e => e.id === Number(form.value.idEmpresaServicio)) ?? null
@@ -44,14 +46,19 @@ const error          = ref('')
 const precioDisplay  = ref('')
 const showSuccessModal = ref(false)
 
+const comisionFija = computed(() => 500)
+
 const cargoAdicionalEstimado = computed(() => {
-  const plan = auth.user?.plan
-  if (!plan || !form.value.precio) return 0
+  if (!form.value.precio) return 0
   const precio = Number(form.value.precio)
-  if (precio > plan.maxPrecioPorFactura) {
-    return Math.round((precio - plan.maxPrecioPorFactura) * 0.004)
+  if (precio > umbralCargoAdicional.value) {
+    return Math.round((precio - umbralCargoAdicional.value) * 0.004)
   }
   return 0
+})
+
+const costoTotalEstimado = computed(() => {
+  return comisionFija.value + cargoAdicionalEstimado.value
 })
 
 function formatCOP(v: number) {
@@ -81,11 +88,20 @@ watch(() => form.value.fechaMaxima, (nueva) => {
 
 onMounted(async () => {
   try {
-    const data = await api.get<{ idEmpresaServicio: number; nombre: string; color: string | null; idTipoFactura: number | null; urlTutorial: string | null }[]>(
-      '/empresas-servicios',
-      auth.token,
-    )
-    empresas.value = data.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color, idTipoFactura: x.idTipoFactura, urlTutorial: x.urlTutorial ?? null }))
+    const [empresasData, umbralData] = await Promise.all([
+      api.get<{ idEmpresaServicio: number; nombre: string; color: string | null; idTipoFactura: number | null; urlTutorial: string | null }[]>(
+        '/empresas-servicios',
+        auth.token,
+      ),
+      api.get<{ nombre: string; valor: string }>(
+        '/parametros-generales/umbralCargoAdicional',
+        auth.token,
+      ).catch(() => null),
+    ])
+    empresas.value = empresasData.map(x => ({ id: x.idEmpresaServicio, nombre: x.nombre, color: x.color, idTipoFactura: x.idTipoFactura, urlTutorial: x.urlTutorial ?? null }))
+    if (umbralData?.valor) {
+      umbralCargoAdicional.value = Number(umbralData.valor)
+    }
   } finally {
     loadingCatalogos.value = false
   }
@@ -212,13 +228,20 @@ async function handleSave() {
                 @input="onPrecioInput"
               />
             </div>
-            <!-- Aviso 4x1000 -->
-            <div v-if="cargoAdicionalEstimado > 0" class="flex items-start gap-2 mt-2 bg-warning-50 border border-warning-100 rounded-xl px-3 py-2.5">
-              <Info class="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
-              <p class="text-xs text-warning-600">
-                Este valor supera el límite de tu plan ({{ formatCOP(auth.user!.plan!.maxPrecioPorFactura) }}).
-                Se aplicará un cargo adicional de <strong>{{ formatCOP(cargoAdicionalEstimado) }}</strong> (4x1000 sobre el excedente).
-              </p>
+            <!-- Preview de costos -->
+            <div v-if="form.value.precio" class="mt-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2">
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-slate-600">Comisión fija</span>
+                <span class="font-medium text-slate-900">{{ formatCOP(comisionFija) }}</span>
+              </div>
+              <div v-if="cargoAdicionalEstimado > 0" class="flex justify-between items-center text-sm border-t border-slate-200 pt-2">
+                <span class="text-slate-600">Cargo 4x1000 <span class="text-xs text-slate-400">(sobre {{ formatCOP(umbralCargoAdicional) }})</span></span>
+                <span class="font-medium text-warning-600">+ {{ formatCOP(cargoAdicionalEstimado) }}</span>
+              </div>
+              <div v-if="cargoAdicionalEstimado > 0" class="flex justify-between items-center text-base font-bold border-t border-slate-200 pt-2">
+                <span class="text-slate-900">Costo total estimado</span>
+                <span class="text-primary-600">{{ formatCOP(costoTotalEstimado) }}</span>
+              </div>
             </div>
           </div>
 

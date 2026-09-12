@@ -416,7 +416,9 @@ const inputClass = 'w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text
                   <span v-if="item.suscripcion_activa?.plan" class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
                     {{ item.suscripcion_activa.plan.nombre }}
                   </span>
-                  <span v-else class="text-xs text-slate-400">Sin plan</span>
+                  <span v-else class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                    Sin plan
+                  </span>
                 </td>
                 <td class="px-5 py-3.5">
                   <span v-if="item.suscripcion_activa?.fechaProximoPago" :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium', proximoPagoUrgente(item.suscripcion_activa.fechaProximoPago) ? 'bg-warning-50 text-warning-600' : 'text-slate-600']">

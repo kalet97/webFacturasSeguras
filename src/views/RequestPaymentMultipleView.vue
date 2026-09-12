@@ -5,8 +5,8 @@ import { Upload, CheckCircle, Info, Copy, ZoomIn } from 'lucide-vue-next'
 import { useRecibosStore } from '@/stores/recibos'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
-import { calcComision } from '@/utils/comision'
 import { roundUpToHundred } from '@/utils/money'
+import { UMBRAL_CARGO_ADICIONAL_DEFAULT } from '@/constants/parametrosGenerales'
 import AppHeader from '@/components/AppHeader.vue'
 import AppButton from '@/components/AppButton.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
@@ -18,6 +18,7 @@ const store = useRecibosStore()
 const auth = useAuthStore()
 
 const ids = computed(() => String(route.query.ids ?? '').split(',').filter(Boolean))
+const umbral = ref<number>(UMBRAL_CARGO_ADICIONAL_DEFAULT)
 
 const items = computed(() => {
   return ids.value
@@ -25,12 +26,14 @@ const items = computed(() => {
     .filter((r): r is NonNullable<typeof r> => !!r)
     .map(recibo => {
       const valorRecibo = recibo.amount ?? 0
-      const comision = calcComision(valorRecibo, auth.user?.plan)
-      return { recibo, valorRecibo, comision, total: valorRecibo + comision }
+      const cargoAdicional = valorRecibo > umbral.value ? Math.round((valorRecibo - umbral.value) * 0.004) : 0
+      const comisionFija = 500
+      return { recibo, valorRecibo, cargoAdicional, comisionFija, total: valorRecibo + comisionFija + cargoAdicional }
     })
 })
 
-const commissionTotal = computed(() => items.value.reduce((s, i) => s + i.comision, 0))
+const cargoAdicionalTotal = computed(() => items.value.reduce((s, i) => s + i.cargoAdicional, 0))
+const comisionFijaTotal = computed(() => items.value.length * 500)
 const totalSinRedondeo = computed(() => items.value.reduce((s, i) => s + i.total, 0))
 const total = computed(() => roundUpToHundred(totalSinRedondeo.value))
 const redondeo = computed(() => total.value - totalSinRedondeo.value)
@@ -46,16 +49,20 @@ onMounted(async () => {
   }
 
   try {
-    const [numParam, titularParam, llaveParam, llaveTitularParam] = await Promise.all([
+    const [numParam, titularParam, llaveParam, llaveTitularParam, umbralParam] = await Promise.all([
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequi',        auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/nequiTitular', auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/llave',        auth.token),
       api.get<{ nombre: string; valor: string }>('/parametros-generales/llaveTitular', auth.token),
+      api.get<{ nombre: string; valor: string }>('/parametros-generales/umbralCargoAdicional', auth.token).catch(() => null),
     ])
     nequiNumber.value  = numParam?.valor  ?? null
     nequiTitular.value = titularParam?.valor ?? null
     llaveValue.value   = llaveParam?.valor ?? null
     llaveTitular.value = llaveTitularParam?.valor ?? null
+    if (umbralParam?.valor) {
+      umbral.value = Number(umbralParam.valor)
+    }
   } catch {
     // si falla, no se muestran los datos
   }
@@ -105,7 +112,7 @@ async function confirmPayment() {
   loading.value = true
   try {
     await store.requestPaymentMultiple(
-      items.value.map(i => ({ id: i.recibo.id, valorRecibo: i.valorRecibo, comision: i.comision })),
+      items.value.map(i => ({ id: i.recibo.id, valorRecibo: i.valorRecibo, cargoAdicional: i.cargoAdicional, comisionFija: i.comisionFija })),
       uploadedFile.value,
     )
     showConfirm.value = false
@@ -139,7 +146,10 @@ async function confirmPayment() {
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-medium text-slate-800 text-sm truncate">{{ i.recibo.company }}</p>
-              <p v-if="i.comision > 0" class="text-xs text-warning-600">+ {{ formatCurrency(i.comision) }} cargo 4x1000</p>
+              <div class="flex gap-2 text-xs text-slate-500 mt-0.5">
+                <span>Comisión: {{ formatCurrency(i.comisionFija) }}</span>
+                <span v-if="i.cargoAdicional > 0">Cargo: {{ formatCurrency(i.cargoAdicional) }}</span>
+              </div>
             </div>
             <p class="font-semibold text-slate-800 text-sm shrink-0">{{ formatCurrency(i.total) }}</p>
           </div>
@@ -148,14 +158,18 @@ async function confirmPayment() {
         <div class="space-y-3">
           <div class="flex justify-between items-center py-2 border-b border-slate-50">
             <span class="text-sm text-slate-600">Subtotal recibos</span>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(totalSinRedondeo - commissionTotal) }}</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(totalSinRedondeo - comisionFijaTotal - cargoAdicionalTotal) }}</span>
           </div>
-          <div v-if="commissionTotal > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
+          <div class="flex justify-between items-center py-2 border-b border-slate-50">
+            <span class="text-sm text-slate-600">Comisión de servicio</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(comisionFijaTotal) }}</span>
+          </div>
+          <div v-if="cargoAdicionalTotal > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm text-slate-600">Cargo adicional (4x1000)</span>
+              <span class="text-sm text-slate-600">Cargo 4x1000</span>
               <Info class="w-3.5 h-3.5 text-slate-400" />
             </div>
-            <span class="font-semibold text-slate-800">{{ formatCurrency(commissionTotal) }}</span>
+            <span class="font-semibold text-slate-800">{{ formatCurrency(cargoAdicionalTotal) }}</span>
           </div>
           <div v-if="redondeo > 0" class="flex justify-between items-center py-2 border-b border-slate-50">
             <span class="text-sm text-slate-600">Redondeo</span>
@@ -275,7 +289,7 @@ async function confirmPayment() {
     <ConfirmationModal
       :open="showConfirm"
       title="Confirmar solicitud"
-      :message="`Se solicitará el pago de ${formatCurrency(total)} para ${items.length} recibo${items.length !== 1 ? 's' : ''}, incluida la comisión del servicio.`"
+      :message="`Se solicitará el pago de ${formatCurrency(total)} para ${items.length} recibo${items.length !== 1 ? 's' : ''}, incluida la comisión de servicio y cargos adicionales.`"
       confirm-label="Confirmar pago"
       :loading="loading"
       @confirm="confirmPayment"

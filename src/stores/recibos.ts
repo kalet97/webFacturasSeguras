@@ -22,6 +22,7 @@ export interface Recibo {
   address: string
   amount?: number
   surcharge?: number
+  comision?: number
   status: ReciboStatus
   daysLeft: number
   notifications: Notification[]
@@ -77,6 +78,7 @@ interface ApiRecibo {
   nombre: string
   precio: number | null
   cargoAdicional: number | null
+  comision?: number | null
   fechaOportuna: string | null
   fechaMaxima: string | null
   fechaSistem: string | null
@@ -146,6 +148,7 @@ function mapRecibo(r: ApiRecibo, clienteAddress: string): Recibo {
     address: clienteAddress,
     amount: r.precio ?? undefined,
     surcharge: r.cargoAdicional ?? undefined,
+    comision: r.comision ?? undefined,
     status,
     daysLeft: status === 'paid' || status === 'reviewing' ? 0 : calcDaysLeft(r.fechaMaxima),
     notifications: [],
@@ -248,9 +251,9 @@ export const useRecibosStore = defineStore('recibos', () => {
     updateRecibo(id, { status: 'reviewing', daysLeft: 0 })
   }
 
-  async function requestPayment(id: string, valorRecibo: number, comision: number, file: File): Promise<void> {
+  async function requestPayment(id: string, valorRecibo: number, cargoAdicional: number, comisionFija: number, file: File): Promise<void> {
     const auth = useAuthStore()
-    const valorTotal = valorRecibo + comision
+    const valorTotal = valorRecibo + comisionFija + cargoAdicional
 
     const formData = new FormData()
     formData.append('archivo', file)
@@ -260,7 +263,7 @@ export const useRecibosStore = defineStore('recibos', () => {
       api.post('/historial-pago-recibos', {
         idRecibo: Number(id),
         valorRecibo,
-        comision,
+        comision: comisionFija,
         valorTotal,
         pagado: 0,
         urlComprobante: url,
@@ -271,7 +274,7 @@ export const useRecibosStore = defineStore('recibos', () => {
   }
 
   async function requestPaymentMultiple(
-    items: { id: string; valorRecibo: number; comision: number }[],
+    items: { id: string; valorRecibo: number; cargoAdicional: number; comisionFija: number }[],
     file: File,
   ): Promise<void> {
     const auth = useAuthStore()
@@ -281,13 +284,13 @@ export const useRecibosStore = defineStore('recibos', () => {
     const { url } = await api.upload<{ url: string }>('/upload/comprobante', formData, auth.token)
 
     await Promise.all(
-      items.map(({ id, valorRecibo, comision }) => {
-        const valorTotal = valorRecibo + comision
+      items.map(({ id, valorRecibo, cargoAdicional, comisionFija }) => {
+        const valorTotal = valorRecibo + comisionFija + cargoAdicional
         return Promise.all([
           api.post('/historial-pago-recibos', {
             idRecibo: Number(id),
             valorRecibo,
-            comision,
+            comision: comisionFija,
             valorTotal,
             pagado: 0,
             urlComprobante: url,
