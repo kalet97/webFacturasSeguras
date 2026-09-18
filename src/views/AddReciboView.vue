@@ -229,7 +229,7 @@ async function handleSave() {
               />
             </div>
             <!-- Preview de costos -->
-            <div v-if="form.value.precio" class="mt-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2">
+            <div v-if="form.precio" class="mt-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2">
               <div class="flex justify-between items-center text-sm">
                 <span class="text-slate-600">Comisión fija</span>
                 <span class="font-medium text-slate-900">{{ formatCOP(comisionFija) }}</span>
