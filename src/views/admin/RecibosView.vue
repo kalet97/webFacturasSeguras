@@ -9,6 +9,8 @@ import {
 } from 'lucide-vue-next'
 import { api } from '@/services/api'
 import { useAdminAuthStore } from '@/stores/adminAuth'
+import { roundUpToHundred } from '@/utils/money'
+import { UMBRAL_CARGO_ADICIONAL_DEFAULT } from '@/constants/parametrosGenerales'
 
 const adminAuth = useAdminAuthStore()
 
@@ -66,6 +68,61 @@ const estados      = ref<Estado[]>([])
 const contadores       = ref<Record<number, number>>({})
 const totalGeneral     = ref(0)
 const loadingContadores = ref(false)
+
+// --- Selección múltiple para sumar valores (comparar con comprobante) ---
+// Se guarda por idRecibo para que la selección se mantenga al cambiar de página o filtro.
+const seleccionados = ref<Map<number, Recibo>>(new Map())
+const umbralCargoAdicional = ref<number>(UMBRAL_CARGO_ADICIONAL_DEFAULT)
+
+function isSeleccionado(r: Recibo) {
+  return seleccionados.value.has(r.idRecibo)
+}
+
+function toggleSeleccion(r: Recibo) {
+  if (seleccionados.value.has(r.idRecibo)) seleccionados.value.delete(r.idRecibo)
+  else seleccionados.value.set(r.idRecibo, r)
+}
+
+const paginaSeleccionada = computed(() =>
+  recibos.value.length > 0 && recibos.value.every(r => seleccionados.value.has(r.idRecibo))
+)
+
+function toggleSeleccionPagina() {
+  if (paginaSeleccionada.value) recibos.value.forEach(r => seleccionados.value.delete(r.idRecibo))
+  else recibos.value.forEach(r => seleccionados.value.set(r.idRecibo, r))
+}
+
+function limpiarSeleccion() {
+  seleccionados.value.clear()
+}
+
+// Mismo cálculo que hace el cliente en RequestPaymentMultipleView
+const resumenSeleccion = computed(() => {
+  const lista = Array.from(seleccionados.value.values())
+  const subtotal = lista.reduce((s, r) => s + (r.precio ?? 0), 0)
+  const cargoAdicional = lista.reduce((s, r) => {
+    const valor = r.precio ?? 0
+    return s + (valor > umbralCargoAdicional.value ? Math.round((valor - umbralCargoAdicional.value) * 0.004) : 0)
+  }, 0)
+  const comisionFija = lista.length * 500
+  return {
+    cantidad: lista.length,
+    subtotal,
+    totalConComision: roundUpToHundred(subtotal + cargoAdicional + comisionFija),
+  }
+})
+
+// Mantener actualizados los recibos seleccionados si cambian (precio, estado...)
+watch(recibos, list => {
+  list.forEach(r => { if (seleccionados.value.has(r.idRecibo)) seleccionados.value.set(r.idRecibo, r) })
+}, { deep: true })
+
+async function fetchUmbralCargoAdicional() {
+  try {
+    const param = await api.get<{ valor: string }>('/parametros-generales/umbralCargoAdicional', adminAuth.token)
+    if (param?.valor) umbralCargoAdicional.value = Number(param.valor)
+  } catch {}
+}
 
 // --- Panel detalle ---
 const selected  = ref<Recibo | null>(null)
@@ -662,6 +719,7 @@ onMounted(async () => {
   await fetchEstados()
   fetchContadores()
   fetchRecibos()
+  fetchUmbralCargoAdicional()
   document.addEventListener('paste', handlePaste)
 })
 onUnmounted(() => document.removeEventListener('paste', handlePaste))
@@ -877,6 +935,15 @@ const pages = computed(() => {
             <thead>
               <tr class="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <!-- <th class="text-left px-5 py-3.5">ID</th> -->
+                <th class="pl-5 pr-1 py-3.5 w-8">
+                  <input
+                    type="checkbox"
+                    :checked="paginaSeleccionada"
+                    @change="toggleSeleccionPagina"
+                    class="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    title="Seleccionar todos los de esta página"
+                  />
+                </th>
                 <th class="text-left px-5 py-3.5">Estado</th>
                 <th class="text-right px-5 py-3.5">Valor</th>
                 <th class="text-left px-5 py-3.5">Fecha límite</th>
@@ -905,6 +972,16 @@ const pages = computed(() => {
                 ]"
               >
                 <!-- <td class="px-5 py-3.5 text-slate-400 font-mono text-xs">#{{ recibo.idRecibo }}</td> -->
+
+                <td class="pl-5 pr-1 py-3.5">
+                  <input
+                    type="checkbox"
+                    :checked="isSeleccionado(recibo)"
+                    @change="toggleSeleccion(recibo)"
+                    class="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    title="Seleccionar para sumar"
+                  />
+                </td>
 
                 <td class="px-5 py-3.5">
                   <span :class="['inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap', statusClass(recibo)]">
@@ -1060,6 +1137,30 @@ const pages = computed(() => {
           </div>
         </div>
       </template>
+    </div>
+
+    <!-- Barra resumen de recibos seleccionados -->
+    <div
+      v-if="resumenSeleccion.cantidad > 0"
+      class="sticky bottom-4 z-30 mt-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 bg-slate-900 text-white rounded-2xl shadow-xl px-5 py-4"
+    >
+      <p class="text-sm font-medium">
+        {{ resumenSeleccion.cantidad }} recibo{{ resumenSeleccion.cantidad !== 1 ? 's' : '' }} seleccionado{{ resumenSeleccion.cantidad !== 1 ? 's' : '' }}
+      </p>
+      <div class="flex items-baseline gap-2">
+        <span class="text-xs text-slate-400">Suma recibos</span>
+        <span class="text-xl font-black tabular-nums">{{ formatPrecio(resumenSeleccion.subtotal) }}</span>
+      </div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-xs text-slate-400">Con comisión y cargos</span>
+        <span class="text-lg font-bold tabular-nums text-primary-300">{{ formatPrecio(resumenSeleccion.totalConComision) }}</span>
+      </div>
+      <button
+        @click="limpiarSeleccion"
+        class="sm:ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-white/10 hover:bg-white/20 rounded-lg transition"
+      >
+        <X class="w-3.5 h-3.5" /> Limpiar selección
+      </button>
     </div>
   </div>
 

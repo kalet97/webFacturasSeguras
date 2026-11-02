@@ -86,10 +86,15 @@ const recargo4x1000 = computed(() =>
     .reduce((s, r) => s + (r.surcharge ?? 0), 0)
 )
 
+// Misma comisión fija por recibo que se cobra en RequestPaymentView / RequestPaymentMultipleView
+const COMISION_FIJA = 500
+
+const recibosPorPagar = computed(() => store.recibos.filter(r => r.status !== 'paid' && r.amount))
+
+const comisionTotal = computed(() => recibosPorPagar.value.length * COMISION_FIJA)
+
 const totalPendingSinRedondeo = computed(() =>
-  store.recibos
-    .filter(r => r.status !== 'paid' && r.amount)
-    .reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0)
+  recibosPorPagar.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0) + COMISION_FIJA, 0)
 )
 
 const totalPending = computed(() => roundUpToHundred(totalPendingSinRedondeo.value))
@@ -139,7 +144,7 @@ function toggleSelect(id: string) {
 const selectedRecibos = computed(() => store.recibos.filter(r => selectedIds.value.has(r.id)))
 
 const selectedTotal = computed(() =>
-  roundUpToHundred(selectedRecibos.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0), 0))
+  roundUpToHundred(selectedRecibos.value.reduce((s, r) => s + (r.amount ?? 0) + (r.surcharge ?? 0) + COMISION_FIJA, 0))
 )
 
 function goToMultiPayment() {
@@ -182,6 +187,10 @@ function goToMultiPayment() {
         <div v-if="recargo4x1000 > 0" class="flex items-center justify-between mt-2 bg-white/10 rounded-xl px-3 py-2">
           <p class="text-white/80 text-xs">Incluye cargo 4x1000</p>
           <p class="text-white text-sm font-bold">{{ formatCurrency(recargo4x1000) }}</p>
+        </div>
+        <div v-if="comisionTotal > 0" class="flex items-center justify-between mt-2 bg-white/10 rounded-xl px-3 py-2">
+          <p class="text-white/80 text-xs">Incluye comisión ({{ recibosPorPagar.length }} × {{ formatCurrency(COMISION_FIJA) }})</p>
+          <p class="text-white text-sm font-bold">{{ formatCurrency(comisionTotal) }}</p>
         </div>
         <div class="flex gap-3 mt-3">
           <div class="flex items-center gap-1.5">
